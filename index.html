@@ -1217,19 +1217,19 @@ render();
 /* ===== AUTENTICAÇÃO FIREBASE DSM 2026 ===== */
 const IRIS_LOGIN = "DSM 2026";
 async function doLogin(){
-  const user=document.getElementById("loginUser").value.trim();
+  const user=document.getElementById("loginUser").value.trim().replace(/\s+/g," ").toUpperCase();
   const pass=document.getElementById("loginPass").value;
   const error=document.getElementById("loginError");
-  if(user!==IRIS_LOGIN){error.textContent="Usuário inválido. Use DSM 2026.";return;}
+  if(user!==IRIS_LOGIN.toUpperCase()){error.textContent="Usuário inválido. Digite DSM 2026.";return;}
   if(!window.sheFirebaseLogin){error.textContent="Firebase ainda está carregando. Aguarde alguns segundos e tente novamente.";return;}
   const remember=document.getElementById("rememberLogin")?.checked;
   const btn=document.querySelector('#loginForm button[type="submit"]');if(btn){btn.disabled=true;btn.textContent='Conectando...';}
   try{
     await window.sheFirebaseLogin(pass);
-    sessionStorage.setItem("iris_auth","1");sessionStorage.setItem("iris_user",user);
-    if(remember){localStorage.setItem("iris_remember_user",user)}else{localStorage.removeItem("iris_remember_user")}
+    sessionStorage.setItem("iris_auth","1");sessionStorage.setItem("iris_user",IRIS_LOGIN);
+    if(remember){localStorage.setItem("iris_remember_user",IRIS_LOGIN)}else{localStorage.removeItem("iris_remember_user")}
     document.body.classList.add("logged-in");error.textContent="";document.getElementById("loginPass").value="";
-  }catch(err){console.error(err);error.textContent=window.sheFirebaseErrorMessage?window.sheFirebaseErrorMessage(err):"Não foi possível conectar ao Firebase. Confira a configuração e a conta mestre.";document.getElementById("loginPass").value="";document.getElementById("loginPass").focus();}
+  }catch(err){console.error(err);error.textContent=window.sheFirebaseErrorMessage?window.sheFirebaseErrorMessage(err):"Não foi possível conectar. Confira a senha e a configuração do acesso compartilhado.";document.getElementById("loginPass").value="";document.getElementById("loginPass").focus();}
   finally{if(btn){btn.disabled=false;btn.textContent='Entrar';}}
 }
 function logoutIRIS(){
@@ -1379,8 +1379,8 @@ window.sheFirebaseLogin=async(password)=>{
 window.sheFirebaseLogout=async()=>{try{if(unsubscribe)unsubscribe();unsubscribe=null;if(historyUnsubscribe)historyUnsubscribe();historyUnsubscribe=null;if(siteStateUnsubscribe)siteStateUnsubscribe();siteStateUnsubscribe=null;connected=false;if(auth?.currentUser)await signOut(auth);setStatus('desconectado',false)}catch(e){console.warn(e)}};
 window.sheFirebaseErrorMessage=(err)=>{
  const code=err?.code||'';
- if(code.includes('auth/invalid-credential')||code.includes('auth/wrong-password')||code.includes('auth/user-not-found'))return'Conta mestre não encontrada ou senha incorreta. Crie no Firebase Auth o usuário '+MASTER_EMAIL+'.';
- if(code.includes('auth/operation-not-allowed'))return'Ative o método E-mail/senha em Firebase → Authentication → Sign-in method.';
+ if(code.includes('auth/invalid-credential')||code.includes('auth/wrong-password')||code.includes('auth/user-not-found'))return'Senha incorreta ou acesso compartilhado ainda não cadastrado. O usuário visível continua sendo DSM 2026.';
+ if(code.includes('auth/operation-not-allowed'))return'O acesso compartilhado ainda não foi ativado no Firebase. É necessário habilitar E-mail/senha uma única vez para o sistema conectar.';
  if(code.includes('permission-denied'))return'Firebase conectado, mas as regras do Firestore/Storage bloquearam o acesso. Publique as regras que permitem acesso somente a usuários autenticados.';
  if(code.includes('unavailable')||code.includes('network'))return'Falha de rede. Confira sua conexão e tente novamente.';
  return'Falha Firebase: '+(err?.message||code||'erro desconhecido');
