@@ -385,6 +385,7 @@ table{color:#173b67!important}th{background:#edf5fa!important;color:#174a78!impo
 <nav id="tabs">
   <button data-t="painel" class="on">Painel</button>
   <button data-t="equip">Equipamentos</button>
+  <button data-t="hist">Histórico de Equipamentos</button>
   <button data-t="hh">HH Planejado × Realizado</button>
   <button data-t="cert">Certificados</button>
   <button data-t="import">Importar planilha</button>
@@ -552,6 +553,14 @@ table{color:#173b67!important}th{background:#edf5fa!important;color:#174a78!impo
   <div class="sec">Demandas oficiais e cadastradas — conclusão, realizado e Saving</div><div class="tablewrap"><table><thead><tr><th>Demanda / categoria / fornecedor</th><th>Mês</th><th>Orçado (R$)</th><th>Realizado (R$)</th><th>Saving (R$)</th><th>Justificativa do Saving</th><th>Status</th><th>Ação</th></tr></thead><tbody id="budgetDemandRows"><tr><td colspan="7">Demandas oficiais carregadas para 2027.</td></tr></tbody></table></div><p class="iris-help">Ao concluir uma demanda, o valor realizado é contabilizado no gráfico e nos cards. Cadastre o Saving e justifique o motivo na própria linha; o saving também é somado nos indicadores e no gráfico. O filtro de mês permite acompanhar as demandas daquele mês.</p>
 </section>
 
+<section id="hist" hidden>
+  <div class="sec">Histórico de equipamentos — inclusões e exclusões</div>
+  <div class="grid3" id="histKpis"></div>
+  <div class="card" style="margin:16px 0"><h3>Movimentações por mês</h3><canvas id="histChart" style="width:100%;height:260px"></canvas></div>
+  <div class="card"><div class="filterbar"><select id="histYear" onchange="renderEquipmentHistory()"><option value="">Todos os anos</option></select><select id="histType" onchange="renderEquipmentHistory()"><option value="">Todas as movimentações</option><option value="Inclusão">Inclusões</option><option value="Exclusão">Exclusões</option></select><input id="histSearch" placeholder="Buscar equipamento / TAG / FLOC" oninput="renderEquipmentHistory()"></div>
+  <div class="tablewrap"><table><thead><tr><th>Data</th><th>Movimentação</th><th>Equipamento</th><th>TAG / FLOC</th><th>Categoria</th><th>Evidências</th></tr></thead><tbody id="histRows"></tbody></table></div></div>
+  <p class="iris-help">O histórico é independente da lista ativa: excluir um equipamento não apaga o registro da movimentação. Anexe o formulário e o e-mail em PDF ou EML em cada registro.</p>
+</section>
 <section id="config" hidden>
   <div class="card">
     <h3 style="margin-top:0">Conexão com o Firebase</h3>
@@ -722,6 +731,9 @@ async function idbGet(id){const db=await idbOpen();return new Promise((resolve,r
 async function idbDel(id){if(!id)return;const db=await idbOpen();return new Promise((resolve,reject)=>{const tx=db.transaction(CERT_STORE,'readwrite');tx.objectStore(CERT_STORE).delete(id);tx.oncomplete=()=>{db.close();resolve()};tx.onerror=()=>{db.close();reject(tx.error)}})}
 function persistData(){try{const clean=JSON.parse(JSON.stringify(data));localStorage.setItem(CERT_DATA_KEY,JSON.stringify(clean));if(window.sheFirebaseSave)window.sheFirebaseSave(clean)}catch(err){console.warn('Persistência indisponível',err)}}
 function restoreData(){try{const raw=localStorage.getItem(CERT_DATA_KEY);if(raw){const saved=JSON.parse(raw);if(Array.isArray(saved)&&saved.length){data=saved;data.forEach(e=>{if(!Array.isArray(e.certs))e.certs=[]});}}}catch(err){console.warn('Não foi possível restaurar dados',err)}}
+// Ponte explícita entre o script principal e o módulo Firebase (variáveis let não ficam em window).
+window.getEquipmentData=()=>data;
+window.setEquipmentData=(rows)=>{if(!Array.isArray(rows))return;data=rows;data.forEach(e=>{if(!Array.isArray(e.certs))e.certs=[];if(!Array.isArray(e.history))e.history=[];if(!Array.isArray(e.correctiveActions))e.correctiveActions=[]});localStorage.setItem(CERT_DATA_KEY,JSON.stringify(data));render();};
 
 /* Registro de auditoria e confirmação para inclusão/exclusão.
    Em HTML estático, a senha pode ser visualizada no código-fonte; para segurança real,
@@ -780,6 +792,7 @@ function deleteEquipment(id){
   if(!requireEquipmentPassword('excluir'))return;
   if(!confirm(`Confirma excluir o equipamento "${e.nome}"? Esta ação não poderá ser desfeita.`))return;
   const name=e.nome,floc=e.floc;
+  recordEquipmentMovement('Exclusão',e);
   data=data.filter(x=>x.id!==id);
   try{persistData();}catch(_){}
   render();toast(`Equipamento ${name} excluído.`);
@@ -933,6 +946,7 @@ function saveEq(){
     const created={id:'EQ'+String(data.length+1).padStart(3,'0'),certs:[],history:[],correctiveActions:[],...o};
     addEqHistory(created,'Equipamento cadastrado',`Cadastro de ${created.nome} (${created.floc||'sem FLOC'})`);
     data.push(created);
+    recordEquipmentMovement('Inclusão',created);
   }
   persistData();closeM();render();toast('Equipamento salvo. Próxima execução calculada pela estratégia.');
 }
@@ -978,6 +992,8 @@ const irisYears=Array.from({length:10},(_,i)=>2026+i);
 const blankIris=()=>irisMonths.map(()=>({p:'',nm:'',na:'',r:'',a:''}));
 const irisStore={};
 irisYears.forEach(y=>irisStore[y]={SHE:blankIris(),QUA:blankIris(),SOB:blankIris()});
+try{const savedIris=JSON.parse(localStorage.getItem('sheq_iris_data_v1')||'null');if(savedIris&&typeof savedIris==='object')irisYears.forEach(y=>{if(savedIris[y])irisStore[y]=savedIris[y]})}catch(e){console.warn('IRIS local indisponível',e)}
+function persistIris(){try{localStorage.setItem('sheq_iris_data_v1',JSON.stringify(irisStore))}catch(e){console.error('Falha ao guardar IRIS',e);toast('Não foi possível guardar o Report IRIS neste navegador.')}}
 let irisYear=2026;
 let irisData=irisStore[irisYear];
 function initIrisYears(){
@@ -1032,7 +1048,7 @@ function irisTable(cat){
       const ai=body.querySelector(`[data-i="${i}"][data-k="a"]`);
       if(ai){ai.value=a;irisData[cat][i].a=a}
     }
-    drawIRIS(cat);
+    drawIRIS(cat);persistIris();
     document.getElementById('irisStatus').textContent='Dados SHE CRÍTICO atualizados.';
   }));
 }
@@ -1126,7 +1142,7 @@ function irisFillDemo(){
 }
 function irisClear(){
   ['SHE','QUA','SOB'].forEach(cat=>irisData[cat].forEach(r=>Object.assign(r,{p:'',nm:'',na:'',r:'',a:''})));
-  renderIRIS();document.getElementById('irisStatus').textContent='Dados SHE CRÍTICO limpos.';
+  persistIris();renderIRIS();document.getElementById('irisStatus').textContent='Dados SHE CRÍTICO limpos.';
 }
 function irisExport(){
   const rows=[];
@@ -1149,16 +1165,34 @@ function hhDrawChart(months,equipment,type,year){const c=document.getElementById
 document.getElementById('hhFile').addEventListener('change',async ev=>{const f=ev.target.files[0];if(!f)return;try{const wb=XLSX.read(await f.arrayBuffer(),{type:'array'});const all=[];const normH=v=>String(v||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim();wb.SheetNames.forEach(sn=>{const arr=XLSX.utils.sheet_to_json(wb.Sheets[sn],{defval:''});arr.forEach(r=>{const keys=Object.keys(r),get=(...names)=>{const k=keys.find(k=>names.includes(normH(k)));return k===undefined?'':r[k]};const plan=String(get('plano','plano sap','numero do plano','nº plano','plano manutencao','plano de manutencao')).trim();const rawDate=get('data','data apontamento','data de apontamento','mes','mês','periodo','periodo apontamento');const rawHH=get('hh apontado','hh realizado','horas apontadas','horas','hh','duracao','duração','trabalho real');const hh=Number(String(rawHH).replace(',','.'));if(!plan||!Number.isFinite(hh))return;const yearCell=get('ano','year');const yr=Number(yearCell)||Number(String(rawDate).match(/20\d{2}/)?.[0])||Number(document.getElementById('hhYear').value);const month=hhMonth(rawDate,yr);all.push({plano:plan,year:Number(month.slice(0,4))||yr,month,hh,tipo:String(get('tipo','tipo atividade','disciplina')).trim()})})});if(!all.length){document.getElementById('hhImportMsg').textContent='Não encontrei linhas com Plano SAP e HH. Confira os cabeçalhos da planilha.';return}const importedPlans=new Set(all.map(x=>x.plano));hhActualRows=hhActualRows.filter(x=>!importedPlans.has(x.plano));hhActualRows.push(...all);localStorage.setItem('sheq_hh_actual_v1',JSON.stringify(hhActualRows));document.getElementById('hhImportMsg').textContent=`${all.length} apontamentos importados de ${f.name}. Planos reconhecidos: ${importedPlans.size}.`;hhRender();toast('Planilha de HH apontado importada.')}catch(err){console.error(err);toast('Erro ao ler planilha de HH. Confira o arquivo.')}finally{ev.target.value=''}});
 function hhExport(){if(!window.XLSX)return toast('Biblioteca Excel não carregada.');const trs=[...document.querySelectorAll('#hhRows tr')];const rows=[['Mês','Plano SAP','Equipamento','Tipo','HH planejado','HH realizado','Desvio HH','Aderência'],...trs.map(tr=>[...tr.children].map(td=>td.innerText))];const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(rows),'HH Planejado Realizado');XLSX.writeFile(wb,`HH_Planejado_Realizado_${document.getElementById('hhYear').value}.xlsx`)}
 
+
+/* ---------- histórico global de equipamentos ---------- */
+let equipmentMovements=[];
+try{equipmentMovements=JSON.parse(localStorage.getItem('sheq_equipment_movements_v1')||'[]')}catch(e){equipmentMovements=[]}
+function saveEquipmentMovements(){window.equipmentMovements=equipmentMovements;localStorage.setItem('sheq_equipment_movements_v1',JSON.stringify(equipmentMovements));if(window.sheFirebaseSaveMovementHistory)window.sheFirebaseSaveMovementHistory(equipmentMovements)}
+window.equipmentMovements=equipmentMovements;
+function recordEquipmentMovement(type,e){const rec={id:'MOV'+Date.now()+'_'+Math.random().toString(36).slice(2,7),type,at:new Date().toISOString(),equipmentId:String(e.id||''),nome:e.nome||'',floc:e.floc||'',cat:e.cat||'',evidences:[]};equipmentMovements.unshift(rec);saveEquipmentMovements();return rec}
+function attachMovementEvidence(id){const r=equipmentMovements.find(x=>x.id===id);if(!r)return;const inp=document.createElement('input');inp.type='file';inp.multiple=true;inp.accept='.pdf,.eml,application/pdf,message/rfc822';inp.onchange=async()=>{for(const f of inp.files){if(!/\.(pdf|eml)$/i.test(f.name)){toast('Use somente arquivos PDF ou EML.');continue}try{let item={name:f.name,type:f.type||'',size:f.size};if(window.sheFirebaseUploadMovementEvidence){const up=await window.sheFirebaseUploadMovementEvidence(id,f);Object.assign(item,up)}else{const data=await new Promise((ok,no)=>{const fr=new FileReader();fr.onload=()=>ok(fr.result);fr.onerror=no;fr.readAsDataURL(f)});item.data=data}r.evidences.push(item)}catch(err){console.error(err);toast('Falha ao enviar evidência. Verifique a conexão Firebase.')}}saveEquipmentMovements();renderEquipmentHistory()};inp.click()}
+function openMovementEvidence(url,data){if(url){window.open(url,'_blank','noopener');return}if(data){const a=document.createElement('a');a.href=data;a.download='evidencia';a.click()}}
+function renderEquipmentHistory(){const years=[...new Set(equipmentMovements.map(x=>new Date(x.at).getFullYear()).filter(Boolean))].sort((a,b)=>b-a);const ys=document.getElementById('histYear');if(ys){const old=ys.value;ys.innerHTML='<option value="">Todos os anos</option>'+years.map(y=>`<option value="${y}">${y}</option>`).join('');ys.value=old}
+const year=ys?.value||'',type=document.getElementById('histType')?.value||'',q=(document.getElementById('histSearch')?.value||'').toLowerCase();const list=equipmentMovements.filter(x=>(!year||new Date(x.at).getFullYear()==year)&&(!type||x.type===type)&&(`${x.nome} ${x.floc} ${x.cat}`.toLowerCase().includes(q)));const adds=equipmentMovements.filter(x=>x.type==='Inclusão').length,dels=equipmentMovements.filter(x=>x.type==='Exclusão').length;document.getElementById('histKpis').innerHTML=`<div class="card"><small>Equipamentos incluídos</small><h2>${adds}</h2></div><div class="card"><small>Equipamentos excluídos</small><h2>${dels}</h2></div><div class="card"><small>Total de movimentações</small><h2>${equipmentMovements.length}</h2></div>`;
+document.getElementById('histRows').innerHTML=list.map(x=>`<tr><td>${new Date(x.at).toLocaleString('pt-BR')}</td><td><b style="color:${x.type==='Inclusão'?'#22a06b':'#e5484d'}">${x.type}</b></td><td>${escHtml(x.nome)}</td><td>${escHtml(x.floc)}</td><td>${escHtml(x.cat)}</td><td>${(x.evidences||[]).map(f=>`<button class="btn ghost" onclick="openMovementEvidence('${f.url||''}','${f.data||''}')">${escHtml(f.name)}</button>`).join(' ')} <button class="btn" onclick="attachMovementEvidence('${x.id}')">＋ Anexar PDF/EML</button></td></tr>`).join('')||'<tr><td colspan="6">Nenhuma movimentação encontrada.</td></tr>';
+drawMovementChart(year)}
+window.renderEquipmentHistory=renderEquipmentHistory;
+window.setEquipmentMovements=(rows)=>{equipmentMovements=Array.isArray(rows)?rows:[];window.equipmentMovements=equipmentMovements;localStorage.setItem('sheq_equipment_movements_v1',JSON.stringify(equipmentMovements));renderEquipmentHistory();};
+function drawMovementChart(year){const c=document.getElementById('histChart');if(!c)return;const w=Math.max(320,c.clientWidth),h=260,dpr=devicePixelRatio||1;c.width=w*dpr;c.height=h*dpr;const x=c.getContext('2d');x.setTransform(dpr,0,0,dpr,0,0);x.fillStyle='#fff';x.fillRect(0,0,w,h);const months=Array.from({length:12},(_,i)=>i),a=months.map(m=>equipmentMovements.filter(r=>{const d=new Date(r.at);return(!year||d.getFullYear()==year)&&d.getMonth()===m&&r.type==='Inclusão'}).length),b=months.map(m=>equipmentMovements.filter(r=>{const d=new Date(r.at);return(!year||d.getFullYear()==year)&&d.getMonth()===m&&r.type==='Exclusão'}).length),max=Math.max(1,...a,...b);x.font='11px sans-serif';months.forEach((m,i)=>{const gx=36+i*(w-55)/12,bw=Math.min(13,(w-70)/30);[[a[i],'#20a36b',0],[b[i],'#e5484d',bw+3]].forEach(([v,col,off])=>{x.fillStyle=col;x.fillRect(gx+off,h-35-v/max*190,bw,v/max*190)});x.fillStyle='#555';x.fillText(['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'][m],gx-2,h-14)});x.fillStyle='#20a36b';x.fillRect(w-120,12,10,10);x.fillStyle='#333';x.fillText('Inclusões',w-105,21);x.fillStyle='#e5484d';x.fillRect(w-55,12,10,10);x.fillStyle='#333';x.fillText('Exclusões',w-40,21)}
+
 /* ---------- ui ---------- */
 function toast(t){const e=document.getElementById('toast');e.textContent=t;e.style.display='block';clearTimeout(e._t);e._t=setTimeout(()=>e.style.display='none',2800)}
 function render(){kpis();rows();certs();if(!document.getElementById('iris').hidden)renderIRIS()}
 initIrisYears();
 document.querySelectorAll('#tabs button').forEach(b=>b.onclick=()=>{
   document.querySelectorAll('#tabs button').forEach(x=>x.classList.toggle('on',x===b));
-  ['painel','equip','hh','cert','import','iris','config','budget'].forEach(s=>document.getElementById(s).hidden=s!==b.dataset.t);
+  ['painel','equip','hist','hh','cert','import','iris','config','budget'].forEach(s=>document.getElementById(s).hidden=s!==b.dataset.t);
   if(b.dataset.t==='iris') renderIRIS();
   if(b.dataset.t==='cert') certs();
   if(b.dataset.t==='budget') budgetRender();
+  if(b.dataset.t==='hist') renderEquipmentHistory();
 });
 ['q','fc','fs'].forEach(i=>document.getElementById(i).addEventListener('input',rows));
 document.getElementById('certYear').innerHTML='<option value="">Todos os anos</option>'+certYears.map(y=>`<option value="${y}">${y}</option>`).join('');
@@ -1223,12 +1257,50 @@ window.addEventListener('resize',()=>{if(!document.getElementById('budget').hidd
 <script type="module">
 import { initializeApp, getApps } from 'https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js';
 import { getAuth, signInWithEmailAndPassword, signOut } from 'https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js';
-import { getFirestore, collection, doc, getDocs, onSnapshot, writeBatch } from 'https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js';
+import { getFirestore, collection, doc, getDocs, onSnapshot, writeBatch, setDoc } from 'https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js';
 import { getStorage, ref, uploadBytes, getDownloadURL } from 'https://www.gstatic.com/firebasejs/10.12.5/firebase-storage.js';
 const DEFAULT_CONFIG={apiKey:'AIzaSyDrEIOl0jg-Tzh8XFrdAfPrAa5xWJfKpGM',authDomain:'gest-ea7ff.firebaseapp.com',projectId:'gest-ea7ff',storageBucket:'gest-ea7ff.firebasestorage.app',messagingSenderId:'20233378878',appId:'1:20233378878:web:3fb74fcc627c5f03af056f'};
 const MASTER_EMAIL='she.master@dsm-tortuga.com';
 const EQUIP_COLLECTION='equipamentos';
-let app,auth,db,storage,unsubscribe=null,remoteIds=new Set(),lastSynced=new Map(),saveQueue=Promise.resolve(),connected=false,applyingRemote=false;
+const SITE_STATE_COLLECTION='site_state';
+const SITE_EXCLUDED_KEYS=new Set(['fbcfg','iris_remember_user','sheq_data_v4','sheq_equipment_movements_v1']);
+let app,auth,db,storage,unsubscribe=null,historyUnsubscribe=null,siteStateUnsubscribe=null,remoteIds=new Set(),lastSynced=new Map(),saveQueue=Promise.resolve(),siteSaveQueue=Promise.resolve(),connected=false,applyingRemote=false,applyingSiteRemote=false,storageHooksInstalled=false;
+function siteDocId(key){return encodeURIComponent(String(key)).replace(/\./g,'%2E')}
+function siteStatusError(err){console.error('Sincronização geral',err);setStatus('falha ao salvar dados do site: '+(err?.message||err),false)}
+async function saveSiteStateKey(key,value,deleted=false){
+ if(!db||!auth?.currentUser||applyingSiteRemote||SITE_EXCLUDED_KEYS.has(key))return false;
+ const refDoc=doc(db,SITE_STATE_COLLECTION,siteDocId(key));
+ if(deleted){await setDoc(refDoc,{key,deleted:true,updatedAt:Date.now()},{merge:true});return true;}
+ if(typeof value!=='string')value=String(value);
+ if(value.length>850000)throw new Error('O campo '+key+' excede o limite seguro do Firestore. Anexos devem ser enviados ao Storage.');
+ await setDoc(refDoc,{key,value,deleted:false,updatedAt:Date.now()},{merge:true});return true;
+}
+function installSiteStorageHooks(){
+ if(storageHooksInstalled)return;storageHooksInstalled=true;
+ const originalSet=Storage.prototype.setItem,originalRemove=Storage.prototype.removeItem,originalClear=Storage.prototype.clear;
+ Storage.prototype.setItem=function(key,value){originalSet.call(this,key,value);if(this===window.localStorage&&!applyingSiteRemote&&!SITE_EXCLUDED_KEYS.has(String(key))){const k=String(key),v=String(value);siteSaveQueue=siteSaveQueue.then(()=>saveSiteStateKey(k,v)).then(ok=>{if(ok)setStatus('dados gerais salvos no Firebase',true);return ok}).catch(siteStatusError)}};
+ Storage.prototype.removeItem=function(key){originalRemove.call(this,key);if(this===window.localStorage&&!applyingSiteRemote&&!SITE_EXCLUDED_KEYS.has(String(key))){const k=String(key);siteSaveQueue=siteSaveQueue.then(()=>saveSiteStateKey(k,'',true)).catch(siteStatusError)}};
+ Storage.prototype.clear=function(){if(this===window.localStorage){const keys=[];for(let i=0;i<this.length;i++){const k=this.key(i);if(k&&!SITE_EXCLUDED_KEYS.has(k))keys.push(k)}originalClear.call(this);keys.forEach(k=>{siteSaveQueue=siteSaveQueue.then(()=>saveSiteStateKey(k,'',true)).catch(siteStatusError)})}else originalClear.call(this)};
+}
+async function syncAllSiteState(){
+ installSiteStorageHooks();
+ const snap=await getDocs(collection(db,SITE_STATE_COLLECTION));
+ const cloud=new Map(snap.docs.map(d=>[d.data().key||decodeURIComponent(d.id),{id:d.id,...d.data()}]));
+ const localKeys=[];for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(k&&!SITE_EXCLUDED_KEYS.has(k))localKeys.push(k)}
+ // Dados já existentes na nuvem são recuperados; dados locais ainda não enviados são publicados.
+ applyingSiteRemote=true;
+ try{
+  for(const [key,item] of cloud){if(item.deleted){localStorage.removeItem(key)}else if(typeof item.value==='string'){localStorage.setItem(key,item.value)}}
+ }finally{applyingSiteRemote=false}
+ for(const key of localKeys){if(!cloud.has(key)){const value=localStorage.getItem(key);if(value!==null)await saveSiteStateKey(key,value)}}
+ if(siteStateUnsubscribe)siteStateUnsubscribe();
+ siteStateUnsubscribe=onSnapshot(collection(db,SITE_STATE_COLLECTION),(ss)=>{
+  applyingSiteRemote=true;
+  try{ss.docs.forEach(d=>{const x=d.data(),key=x.key||decodeURIComponent(d.id);if(SITE_EXCLUDED_KEYS.has(key))return;if(x.deleted)localStorage.removeItem(key);else if(typeof x.value==='string'&&localStorage.getItem(key)!==x.value)localStorage.setItem(key,x.value)})}
+  finally{applyingSiteRemote=false}
+  setStatus('dados gerais do site sincronizados',true);
+ },siteStatusError);
+}
 const statusEl=()=>document.getElementById('fbConnectionStatus');
 function setStatus(msg,ok=false){const el=statusEl();if(el){el.textContent=(ok?'● ':'● ')+msg;el.style.color=ok?'#22a06b':'var(--warn)'}const b=document.getElementById('sync');if(b){b.textContent=ok?'● Firebase: conectado':'● Firebase: '+msg;b.style.color=ok?'#22a06b':'#f59e0b'}}
 function getConfig(){try{const saved=JSON.parse(localStorage.getItem('fbcfg')||'null');return saved&&saved.projectId==='gest-ea7ff'?saved:DEFAULT_CONFIG}catch{return DEFAULT_CONFIG}}
@@ -1244,21 +1316,38 @@ async function writeRecords(records){
  remoteIds=new Set(next.keys());lastSynced=next;
 }
 async function syncInitial(){
- const local=Array.isArray(window.data)?window.data:[];
+ await syncAllSiteState();
+ const local=typeof window.getEquipmentData==='function'?window.getEquipmentData():[];
  const snap=await getDocs(collection(db,EQUIP_COLLECTION));
+ const histSnap=await getDocs(collection(db,'historico_equipamentos'));
+ const histCloud=histSnap.docs.map(d=>({...d.data(),id:d.id}));
+ const histLocal=Array.isArray(window.equipmentMovements)?window.equipmentMovements:[];
+ const histMap=new Map(histCloud.map(x=>[String(x.id),x]));
+ for(const x of histLocal)if(!histMap.has(String(x.id)))histMap.set(String(x.id),x);
+ const mergedHistory=[...histMap.values()];
+ if(typeof window.setEquipmentMovements==='function')window.setEquipmentMovements(mergedHistory);
+ // Publica no Firestore também os movimentos que existiam apenas neste navegador.
+ for(const item of histLocal){if(!histCloud.some(x=>String(x.id)===String(item.id))){const clean={...item};await setDoc(doc(db,'historico_equipamentos',String(item.id)),clean,{merge:true});}}
  const cloud=snap.docs.map(d=>({...d.data(),id:d.id}));
  remoteIds=new Set(snap.docs.map(d=>d.id));lastSynced=new Map(cloud.map(x=>[String(x.id),cleanRecord(x)]));
  let merged;
- if(!cloud.length){merged=local.map(cleanRecord);await writeRecords(merged);}
+ if(!cloud.length){merged=local.map(cleanRecord);if(merged.length)await writeRecords(merged);}
  else {const map=new Map(cloud.map(x=>[String(x.id),x]));for(const x of local){if(!map.has(String(x.id)))map.set(String(x.id),cleanRecord(x));}merged=[...map.values()];if(merged.length!==cloud.length)await writeRecords(merged);}
- applyingRemote=true;window.data=merged;localStorage.setItem('sheq_data_v4',JSON.stringify(merged));if(window.render)window.render();applyingRemote=false;
+ applyingRemote=true;
+ if(typeof window.setEquipmentData==='function')window.setEquipmentData(merged);else{window.data=merged;localStorage.setItem('sheq_data_v4',JSON.stringify(merged));}
+ applyingRemote=false;
  if(unsubscribe)unsubscribe();
  unsubscribe=onSnapshot(collection(db,EQUIP_COLLECTION),(ss)=>{
    const rows=ss.docs.map(d=>({...d.data(),id:d.id}));remoteIds=new Set(ss.docs.map(d=>d.id));lastSynced=new Map(rows.map(x=>[String(x.id),cleanRecord(x)]));
-   if(!applyingRemote){applyingRemote=true;window.data=rows;localStorage.setItem('sheq_data_v4',JSON.stringify(rows));if(window.render)window.render();applyingRemote=false;}
+   if(!applyingRemote){applyingRemote=true;if(typeof window.setEquipmentData==='function')window.setEquipmentData(rows);else{window.data=rows;localStorage.setItem('sheq_data_v4',JSON.stringify(rows));}applyingRemote=false;}
    setStatus(`${rows.length} equipamentos sincronizados`,true);
  },err=>{console.error(err);setStatus('erro ao receber atualizações: '+err.message,false)});
- connected=true;setStatus(`${merged.length} equipamentos sincronizados`,true);
+ if(historyUnsubscribe)historyUnsubscribe();
+ historyUnsubscribe=onSnapshot(collection(db,'historico_equipamentos'),(ss)=>{
+   const rows=ss.docs.map(d=>({...d.data(),id:d.id}));
+   if(typeof window.setEquipmentMovements==='function')window.setEquipmentMovements(rows);
+ },err=>{console.error(err);setStatus('erro ao receber histórico: '+err.message,false)});
+ connected=true;setStatus(`${merged.length} equipamentos e ${mergedHistory.length} movimentações sincronizados`,true);
  await migrateCertificatePdfs();
 }
 async function migrateCertificatePdfs(){
@@ -1267,10 +1356,13 @@ async function migrateCertificatePdfs(){
  if(changed&&window.persistData)window.persistData();
 }
 window.sheFirebaseSave=(records)=>{
- if(!connected||applyingRemote||!auth?.currentUser)return;
+ if(!connected||applyingRemote||!auth?.currentUser){setStatus('alteração salva somente neste navegador — Firebase não conectado',false);return Promise.resolve(false);}
  const copy=JSON.parse(JSON.stringify(records));
- saveQueue=saveQueue.then(()=>writeRecords(copy)).catch(err=>{console.error(err);setStatus('falha ao salvar: '+err.message,false)});
+ saveQueue=saveQueue.then(()=>writeRecords(copy)).then(()=>{setStatus('alterações salvas no Firebase',true);return true;}).catch(err=>{console.error(err);setStatus('falha ao salvar: '+err.message,false);return false;});
+ return saveQueue;
 };
+window.sheFirebaseSaveMovementHistory=async(records)=>{if(!connected||!db||!auth?.currentUser)return;try{for(const item of records){const clean=JSON.parse(JSON.stringify(item));await setDoc(doc(db,'historico_equipamentos',String(item.id)),clean,{merge:true});}setStatus('histórico salvo no Firebase',true);return true;}catch(err){console.error('Histórico Firebase',err);setStatus('falha ao salvar histórico: '+err.message,false);throw err}};
+window.sheFirebaseUploadMovementEvidence=async(movementId,file)=>{if(!connected||!storage||!auth?.currentUser)throw new Error('Faça login no Firebase para sincronizar evidências.');const safe=file.name.replace(/[^a-zA-Z0-9._-]/g,'_');const path=`she-critico-historico/${movementId}/${Date.now()}-${safe}`;const target=ref(storage,path);await uploadBytes(target,file,{contentType:file.type||'application/octet-stream'});return{storagePath:path,url:await getDownloadURL(target)}};
 window.sheFirebaseUploadCertificate=async(equipmentId,fileId,file)=>{
  if(!connected||!storage||!auth?.currentUser)throw new Error('Faça login no Firebase antes de enviar PDFs.');
  const path=`she-critico-certificados/${equipmentId}/${fileId}-${(file.name||'certificado.pdf').replace(/[^a-zA-Z0-9._-]/g,'_')}`;
@@ -1284,7 +1376,7 @@ window.sheFirebaseLogin=async(password)=>{
  await syncInitial();
  return cred.user;
 };
-window.sheFirebaseLogout=async()=>{try{if(unsubscribe)unsubscribe();unsubscribe=null;connected=false;if(auth?.currentUser)await signOut(auth);setStatus('desconectado',false)}catch(e){console.warn(e)}};
+window.sheFirebaseLogout=async()=>{try{if(unsubscribe)unsubscribe();unsubscribe=null;if(historyUnsubscribe)historyUnsubscribe();historyUnsubscribe=null;if(siteStateUnsubscribe)siteStateUnsubscribe();siteStateUnsubscribe=null;connected=false;if(auth?.currentUser)await signOut(auth);setStatus('desconectado',false)}catch(e){console.warn(e)}};
 window.sheFirebaseErrorMessage=(err)=>{
  const code=err?.code||'';
  if(code.includes('auth/invalid-credential')||code.includes('auth/wrong-password')||code.includes('auth/user-not-found'))return'Conta mestre não encontrada ou senha incorreta. Crie no Firebase Auth o usuário '+MASTER_EMAIL+'.';
