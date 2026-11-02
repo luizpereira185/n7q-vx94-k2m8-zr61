@@ -203,6 +203,7 @@ pre{background:#000;border:1px solid var(--line);border-radius:8px;padding:14px;
   color:#ff7478;font-size:12px;font-weight:600;
 }
 .login-footer{text-align:center;color:#666;font-size:10px;margin-top:22px}
+.remember-login{display:flex;align-items:center;gap:9px;margin-top:14px;color:#315b81;font-size:13px;cursor:pointer}.remember-login input{width:16px;height:16px;accent-color:#087fbd;cursor:pointer}
 #appContent{display:none}
 body.logged-in #loginScreen{display:none}
 body.logged-in #appContent{display:block}
@@ -312,6 +313,26 @@ table{color:#173b67!important}th{background:#edf5fa!important;color:#174a78!impo
 .filterbtn{background:#fff!important;color:#526a7b!important;border-color:#d1dce2!important}.filterbtn.on{background:#087fbd!important;color:#fff!important;border-color:#087fbd!important}
 .cert-summary-card,.cert-item,.cert-alert{background:#f8fbfe!important}.cert-comp-bar{background:#e6eef5!important}.sap-evidence{background:#eaf7fc!important;color:#075a9e!important;border-color:#b6e5f4!important}.cert-form-note,.note{background:#eef8fd!important;color:#174a78!important;border-color:#b6e5f4!important}
 
+
+/* ===== Histórico e ações corretivas por equipamento ===== */
+.eq-detail-row td{background:#f7fbfe!important;padding:14px 18px!important}
+.eq-detail{border:1px solid #d7e4ed;border-radius:10px;padding:14px;background:#fff}
+.eq-detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.eq-detail h4{margin:0 0 10px;color:#174a78}
+.eq-detail-toggle{border:1px solid #cbdce9;background:#fff;color:#174a78;border-radius:7px;padding:5px 9px;cursor:pointer;font-weight:700}
+.eq-detail-toggle:hover{border-color:#087fbd;color:#087fbd}
+.eq-history-list,.eq-action-list{display:flex;flex-direction:column;gap:7px;max-height:260px;overflow:auto}
+.eq-history-item,.eq-action-item{border:1px solid #e0eaf1;border-radius:8px;padding:9px;background:#f8fbfe;font-size:12px}
+.eq-history-item small,.eq-action-item small{display:block;color:#617d96;margin-top:3px}
+.eq-action-form{display:flex;gap:7px;margin:8px 0;flex-wrap:wrap}
+.eq-action-form input{flex:1;min-width:170px}
+.eq-action-item{display:flex;align-items:flex-start;gap:8px}
+.eq-action-item .action-text{flex:1;min-width:0}
+.eq-action-item.done .action-text{text-decoration:line-through;color:#7a8b9b}
+.eq-delete-btn{background:#fff1f1!important;color:#b42332!important;border:1px solid #f2c4c8!important}
+.eq-detail-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:10px}
+@media(max-width:800px){.eq-detail-grid{grid-template-columns:1fr}}
+
 </style>
 </head>
 <body>
@@ -338,11 +359,14 @@ table{color:#173b67!important}th{background:#edf5fa!important;color:#174a78!impo
           <h1><span>SHE CRÍTICO</span></h1>
           <p>Gestão de equipamentos críticos, certificados e budget.</p>
         </div>
-        <label class="login-label" for="loginUser">Usuário</label>
-        <input class="login-input" id="loginUser" type="text" autocomplete="username" placeholder="Digite seu usuário">
-        <label class="login-label" for="loginPass">Senha</label>
-        <input class="login-input" id="loginPass" type="password" autocomplete="current-password" placeholder="Digite sua senha">
-        <button class="login-btn" type="button" onclick="doLogin()"><span>→</span> ENTRAR NO SISTEMA</button>
+        <form id="loginForm" onsubmit="event.preventDefault();doLogin();" autocomplete="on">
+          <label class="login-label" for="loginUser">Usuário</label>
+          <input class="login-input" id="loginUser" name="username" type="text" autocomplete="username" placeholder="Digite seu usuário">
+          <label class="login-label" for="loginPass">Senha</label>
+          <input class="login-input" id="loginPass" name="password" type="password" autocomplete="current-password" placeholder="Digite sua senha">
+          <label class="remember-login"><input id="rememberLogin" type="checkbox"> <span>Lembrar meu usuário neste computador</span></label>
+          <button class="login-btn" type="submit"><span>→</span> ENTRAR NO SISTEMA</button>
+        </form>
         <div class="login-error" id="loginError"></div>
         <div class="login-footer">Acesso restrito · SHE • QUA • SOB</div>
       </div>
@@ -396,7 +420,7 @@ table{color:#173b67!important}th{background:#edf5fa!important;color:#174a78!impo
     <button class="btn" onclick="openEdit()">+ Novo equipamento</button>
   </div>
   <div class="tablewrap"><table>
-    <thead><tr><th>Equipamento</th><th>TAG / FLOC</th><th>Cat.</th><th>Última</th><th>Próxima</th><th>Estratégia</th><th>Plano SAP</th><th>HH atividade</th><th>Tipo</th><th>Evidência SAP (OM / Cert.)</th><th>Status</th></tr></thead>
+    <thead><tr><th>Detalhes</th><th>Equipamento</th><th>TAG / FLOC</th><th>Cat.</th><th>Última</th><th>Próxima</th><th>Estratégia</th><th>Plano SAP</th><th>HH atividade</th><th>Tipo</th><th>Evidência SAP (OM / Cert.)</th><th>Status</th></tr></thead>
     <tbody id="rows"></tbody></table></div>
   <p style="color:var(--mut);font-size:12px" id="count"></p>
 </section>
@@ -531,16 +555,19 @@ table{color:#173b67!important}th{background:#edf5fa!important;color:#174a78!impo
 <section id="config" hidden>
   <div class="card">
     <h3 style="margin-top:0">Conexão com o Firebase</h3>
-    <p style="color:var(--mut)">Cole aqui a configuração do seu projeto (Console Firebase → Configurações do projeto → Seus apps → Web). Ela fica só neste navegador. A conexão real será ligada na próxima etapa.</p>
-    <pre id="cfgEx">{
-  "apiKey": "...",
-  "authDomain": "seu-projeto.firebaseapp.com",
-  "projectId": "seu-projeto",
-  "storageBucket": "seu-projeto.appspot.com",
-  "appId": "..."
-}</pre>
-    <textarea id="cfg" rows="7" style="width:100%" placeholder="Cole o JSON de configuração"></textarea>
-    <div class="acts"><button class="btn" onclick="saveCfg()">Guardar configuração</button></div>
+    <p style="color:var(--mut)">Projeto configurado: <b>GestaoSHE (gest-ea7ff)</b>. A sincronização usa Firestore e os PDFs dos certificados usam Firebase Storage. O acesso aos dados depende das regras de segurança do Firebase.</p>
+    <div id="fbConnectionStatus" class="cert-form-note" style="margin:10px 0">● Firebase aguardando autenticação e conexão.</div>
+    <pre id="cfgEx">Configuração Web do projeto GestaoSHE</pre>
+    <textarea id="cfg" rows="7" style="width:100%" spellcheck="false">{
+  "apiKey": "AIzaSyDrEIOl0jg-Tzh8XFrdAfPrAa5xWJfKpGM",
+  "authDomain": "gest-ea7ff.firebaseapp.com",
+  "projectId": "gest-ea7ff",
+  "storageBucket": "gest-ea7ff.firebasestorage.app",
+  "messagingSenderId": "20233378878",
+  "appId": "1:20233378878:web:3fb74fcc627c5f03af056f"
+}</textarea>
+    <div class="acts"><button class="btn" onclick="saveCfg()">Salvar configuração e testar conexão</button></div>
+    <p class="iris-help">Para ativar: no Firebase Console, habilite Authentication → E-mail/senha; crie o usuário mestre; crie o Firestore Database e o Storage. Depois configure as regras usando o UID desse usuário. O login do site usa o usuário <b>DSM 2026</b> e a senha cadastrada no Firebase.</p>
   </div>
 </section>
 </main>
@@ -653,8 +680,11 @@ function rows(){
   const q=document.getElementById('q').value.toLowerCase(),fc=document.getElementById('fc').value,fs=document.getElementById('fs').value;
   const l=data.filter(e=>(!fc||e.cat===fc)&&(!fs||status(e)===fs)&&(!q||(e.nome+' '+e.floc+' '+e.forn+' '+e.resp+' '+(e.evidenciaSAP||'')+' '+(e.plano||'')+' '+(e.tipoAtividade||'') ).toLowerCase().includes(q)))
     .sort((a,b)=>(a.prox||'9').localeCompare(b.prox||'9'));
-  document.getElementById('rows').innerHTML=l.map(e=>{const st=status(e);return `<tr onclick="openEdit('${e.id}')"><td><b>${e.nome}</b><br><small style="color:var(--mut)">${e.resp}</small></td><td>${e.floc}</td><td><span class="tag" style="background:${COL[e.cat]}">${e.cat}</span></td><td>${fmt(e.ult)}</td><td>${fmt(e.prox)}</td><td>${strategyLabel(e.estrat)}</td><td>${escHtml(e.plano||extractPlan(e.obs)||'—')}</td><td>${Number(e.hhAtividade)||0}</td><td>${escHtml(e.tipoAtividade||'Não definido')}</td><td><span class="sap-evidence">${escHtml(e.evidenciaSAP||'—')}</span></td><td><span class="${stClass(st)}" title="Status da próxima execução">${st}</span></td></tr>`}).join('');
-  document.getElementById('count').textContent=`${l.length} de ${data.length} equipamentos`;
+  document.getElementById('rows').innerHTML=l.map(e=>{
+    const st=status(e);
+    return `<tr><td><button class="eq-detail-toggle" id="eqtoggle-${e.id}" type="button" title="Abrir histórico e ações corretivas" onclick="toggleEqDetails('${e.id}')">⌄</button></td><td onclick="openEdit('${e.id}')"><b>${escHtml(e.nome)}</b><br><small style="color:var(--mut)">${escHtml(e.resp||'')}</small></td><td onclick="openEdit('${e.id}')">${escHtml(e.floc||'')}</td><td onclick="openEdit('${e.id}')"><span class="tag" style="background:${COL[e.cat]||'#647786'}">${escHtml(e.cat||'')}</span></td><td onclick="openEdit('${e.id}')">${fmt(e.ult)}</td><td onclick="openEdit('${e.id}')">${fmt(e.prox)}</td><td onclick="openEdit('${e.id}')">${strategyLabel(e.estrat)}</td><td onclick="openEdit('${e.id}')">${escHtml(e.plano||extractPlan(e.obs)||'—')}</td><td onclick="openEdit('${e.id}')">${Number(e.hhAtividade)||0}</td><td onclick="openEdit('${e.id}')">${escHtml(e.tipoAtividade||'Não definido')}</td><td onclick="openEdit('${e.id}')"><span class="sap-evidence">${escHtml(e.evidenciaSAP||'—')}</span></td><td onclick="openEdit('${e.id}')"><span class="${stClass(st)}" title="Status da próxima execução">${st}</span></td></tr>${equipmentDetailHtml(e)}`;
+  }).join('');
+  document.getElementById('count').textContent=`${l.length} de ${data.length} equipamentos · Use a setinha para abrir ações corretivas e histórico`;
 }
 
 /* ---------- certificados: gestão anual, anexos PDF e assinatura Engenharia ---------- */
@@ -690,9 +720,76 @@ function idbOpen(){return new Promise((resolve,reject)=>{const r=indexedDB.open(
 async function idbPut(id,blob){const db=await idbOpen();return new Promise((resolve,reject)=>{const tx=db.transaction(CERT_STORE,'readwrite');tx.objectStore(CERT_STORE).put(blob,id);tx.oncomplete=()=>{db.close();resolve()};tx.onerror=()=>{db.close();reject(tx.error)}})}
 async function idbGet(id){const db=await idbOpen();return new Promise((resolve,reject)=>{const tx=db.transaction(CERT_STORE,'readonly');const r=tx.objectStore(CERT_STORE).get(id);r.onsuccess=()=>{db.close();resolve(r.result||null)};r.onerror=()=>{db.close();reject(r.error)}})}
 async function idbDel(id){if(!id)return;const db=await idbOpen();return new Promise((resolve,reject)=>{const tx=db.transaction(CERT_STORE,'readwrite');tx.objectStore(CERT_STORE).delete(id);tx.oncomplete=()=>{db.close();resolve()};tx.onerror=()=>{db.close();reject(tx.error)}})}
-function persistData(){try{const clean=JSON.parse(JSON.stringify(data));localStorage.setItem(CERT_DATA_KEY,JSON.stringify(clean))}catch(err){console.warn('Persistência indisponível',err)}}
+function persistData(){try{const clean=JSON.parse(JSON.stringify(data));localStorage.setItem(CERT_DATA_KEY,JSON.stringify(clean));if(window.sheFirebaseSave)window.sheFirebaseSave(clean)}catch(err){console.warn('Persistência indisponível',err)}}
 function restoreData(){try{const raw=localStorage.getItem(CERT_DATA_KEY);if(raw){const saved=JSON.parse(raw);if(Array.isArray(saved)&&saved.length){data=saved;data.forEach(e=>{if(!Array.isArray(e.certs))e.certs=[]});}}}catch(err){console.warn('Não foi possível restaurar dados',err)}}
-async function openCertFile(fileId){if(!fileId)return toast('Nenhum PDF anexado a este certificado.');try{const blob=await idbGet(fileId);if(!blob)return toast('Arquivo não encontrado neste navegador.');const url=URL.createObjectURL(blob);const w=window.open(url,'_blank');if(!w){const a=document.createElement('a');a.href=url;a.download=blob.name||'certificado.pdf';a.click()}setTimeout(()=>URL.revokeObjectURL(url),60000)}catch(err){toast('Não foi possível abrir o PDF.')}}
+
+/* Registro de auditoria e confirmação para inclusão/exclusão.
+   Em HTML estático, a senha pode ser visualizada no código-fonte; para segurança real,
+   validar permissões no Firebase/servidor antes de publicar para vários usuários. */
+function requireEquipmentPassword(action){
+  const pass=prompt('Confirme a senha para '+action+' equipamento:');
+  if(pass===null)return false;
+  if(pass!==IRIS_PASSWORD){toast('Senha incorreta. Operação cancelada.');return false;}
+  return true;
+}
+function addEqHistory(e,action,detail){
+  if(!e)return;
+  if(!Array.isArray(e.history))e.history=[];
+  e.history.unshift({action,detail:String(detail||''),at:new Date().toISOString()});
+  if(e.history.length>500)e.history.length=500;
+}
+function historyHtml(e){
+  const items=Array.isArray(e.history)?e.history:[];
+  return items.length?items.map(h=>{
+    const d=new Date(h.at||Date.now());
+    return `<div class="eq-history-item"><b>${escHtml(h.action||'Alteração')}</b> — ${escHtml(h.detail||'')}<small>${d.toLocaleDateString('pt-BR')} ${d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit',second:'2-digit'})}</small></div>`;
+  }).join(''):'<div class="eq-history-item">Nenhuma movimentação registrada até o momento.</div>';
+}
+function toggleEqDetails(id){
+  const row=document.getElementById('eqdetail-'+id);
+  if(!row)return;
+  row.hidden=!row.hidden;
+  const btn=document.getElementById('eqtoggle-'+id);
+  if(btn)btn.textContent=row.hidden?'⌄':'⌃';
+}
+function addCorrectiveAction(id){
+  const e=data.find(x=>x.id===id);if(!e)return;
+  const input=document.getElementById('action-input-'+id);
+  const text=(input?.value||'').trim();if(!text)return toast('Descreva a ação corretiva.');
+  if(!Array.isArray(e.correctiveActions))e.correctiveActions=[];
+  const item={id:'ACT-'+Date.now(),text,status:'Em andamento',createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};
+  e.correctiveActions.push(item);addEqHistory(e,'Ação corretiva adicionada',text);
+  persistData();render();document.getElementById('eqdetail-'+id).hidden=false;
+}
+function toggleCorrectiveAction(id,actionId,checked){
+  const e=data.find(x=>x.id===id),a=e?.correctiveActions?.find(x=>x.id===actionId);if(!a)return;
+  a.status=checked?'Concluída':'Em andamento';a.updatedAt=new Date().toISOString();
+  addEqHistory(e,'Ação corretiva atualizada',`${a.text} — ${a.status}`);persistData();render();
+  document.getElementById('eqdetail-'+id).hidden=false;
+}
+function deleteCorrectiveAction(id,actionId){
+  const e=data.find(x=>x.id===id);if(!e)return;
+  const a=e.correctiveActions?.find(x=>x.id===actionId);if(!a)return;
+  if(!confirm('Excluir esta ação corretiva?'))return;
+  e.correctiveActions=e.correctiveActions.filter(x=>x.id!==actionId);
+  addEqHistory(e,'Ação corretiva excluída',a.text);persistData();render();
+  document.getElementById('eqdetail-'+id).hidden=false;
+}
+function deleteEquipment(id){
+  const e=data.find(x=>x.id===id);if(!e)return;
+  if(!requireEquipmentPassword('excluir'))return;
+  if(!confirm(`Confirma excluir o equipamento "${e.nome}"? Esta ação não poderá ser desfeita.`))return;
+  const name=e.nome,floc=e.floc;
+  data=data.filter(x=>x.id!==id);
+  try{persistData();}catch(_){}
+  render();toast(`Equipamento ${name} excluído.`);
+}
+function equipmentDetailHtml(e){
+  const actions=Array.isArray(e.correctiveActions)?e.correctiveActions:[];
+  const actionHtml=actions.length?actions.map(a=>`<div class="eq-action-item ${a.status==='Concluída'?'done':''}"><input type="checkbox" ${a.status==='Concluída'?'checked':''} onchange="toggleCorrectiveAction('${e.id}','${a.id}',this.checked)" title="Marcar como concluída"><div class="action-text">${escHtml(a.text)}<small>${escHtml(a.status||'Em andamento')} · ${a.createdAt?new Date(a.createdAt).toLocaleDateString('pt-BR'):''}</small></div><button class="btn ghost eq-delete-btn" type="button" onclick="deleteCorrectiveAction('${e.id}','${a.id}')">Excluir</button></div>`).join(''):'<div class="eq-action-item">Nenhuma ação corretiva cadastrada.</div>';
+  return `<tr class="eq-detail-row" id="eqdetail-${e.id}" hidden><td colspan="12"><div class="eq-detail"><div class="eq-detail-grid"><section><h4>▸ Ações corretivas / subtópicos</h4><div class="eq-action-form"><input id="action-input-${e.id}" placeholder="Descreva uma ação corretiva ou subtópico..." onkeydown="if(event.key===\'Enter\')addCorrectiveAction('${e.id}')"><button class="btn" type="button" onclick="addCorrectiveAction('${e.id}')">＋ Adicionar</button></div><div class="eq-action-list">${actionHtml}</div></section><section><h4>▸ Histórico de movimentações e alterações</h4><div class="eq-history-list">${historyHtml(e)}</div></section></div><div class="eq-detail-actions"><button class="btn ghost eq-delete-btn" type="button" onclick="deleteEquipment('${e.id}')">🗑 Excluir equipamento</button></div></div></td></tr>`;
+}
+async function openCertFile(fileId,fileUrl){if(fileUrl){window.open(fileUrl,'_blank','noopener');return}if(!fileId)return toast('Nenhum PDF anexado a este certificado.');try{const blob=await idbGet(fileId);if(!blob)return toast('PDF ainda não sincronizado com o Firebase neste navegador.');const url=URL.createObjectURL(blob);const w=window.open(url,'_blank');if(!w){const a=document.createElement('a');a.href=url;a.download=blob.name||'certificado.pdf';a.click()}setTimeout(()=>URL.revokeObjectURL(url),60000)}catch(err){toast('Não foi possível abrir o PDF.')}}
 function renderCertItem(e,c,i){
   const st=certStatusFrom(c),d=days(c.val),sign=c.assinadoEngenharia===true;
   const fileHtml=c.fileId?'<br><button class="cert-file" type="button" onclick="openCertFile(\''+c.fileId+'\')">📎 Abrir PDF</button>':'<br><small style="color:var(--warn)">Sem PDF anexado</small>';
@@ -743,8 +840,30 @@ function certs(){
     const cs=certsForYear(e,year).slice().sort((a,b)=>(a.val||'9999').localeCompare(b.val||''));
     const cv=coverage(e,y); const covText=cv.expected===null?'Periodicidade não definida':`${cv.count}/${cv.expected} certificados em ${y}`;
     const emptyMsg='<div class="cert-empty">Nenhum certificado cadastrado para este equipamento em '+y+'. '+(cv.expected!==null?('Faltam '+cv.missing+' de '+cv.expected+'.'):'')+'</div>';
-    return '<div class="cert-eq"><div class="cert-eq-head"><span class="tag" style="background:'+COL[e.cat]+'">'+e.cat+'</span><div class="info"><b>'+escHtml(e.nome)+'</b><br><small>'+escHtml(e.floc||'')+' · '+escHtml(e.forn||'Sem fornecedor')+' · <strong>'+escHtml(covText)+'</strong></small></div><button class="btn cert-add" onclick="openCertM(\''+e.id+'\')">+ Adicionar certificado</button></div><div class="cert-items">'+(cs.length?cs.map((c,i)=>renderCertItem(e,c,i)).join(''):emptyMsg)+'</div></div>';
+    return '<div class="cert-eq"><div class="cert-eq-head"><span class="tag" style="background:'+COL[e.cat]+'">'+e.cat+'</span><div class="info"><b>'+escHtml(e.nome)+'</b><br><small>'+escHtml(e.floc||'')+' · '+escHtml(e.forn||'Sem fornecedor')+' · <strong>'+escHtml(covText)+'</strong></small></div><button class="btn ghost" type="button" onclick="toggleCertHistory(\''+e.id+'\')">⌄ Histórico / Ações corretivas</button><button class="btn cert-add" onclick="openCertM(\''+e.id+'\')">+ Adicionar certificado</button></div><div class="cert-items">'+(cs.length?cs.map((c,i)=>renderCertItem(e,c,i)).join(''):emptyMsg)+'</div><div class="cert-history" id="cert-history-'+e.id+'" hidden><h4>Histórico de movimentações e alterações</h4><div class="eq-history-list">'+historyHtml(e)+'</div><h4 style="margin-top:12px">Ações corretivas / subtópicos</h4><div class="eq-action-form"><input id="cert-action-input-'+e.id+'" placeholder="Descreva uma ação corretiva ou subtópico..." onkeydown="if(event.key===\'Enter\')addCertCorrectiveAction(\''+e.id+'\')"><button class="btn" type="button" onclick="addCertCorrectiveAction(\''+e.id+'\')">＋ Adicionar ação</button></div><div class="eq-action-list">'+((e.correctiveActions||[]).length?(e.correctiveActions||[]).map(a=>'<div class="eq-action-item '+(a.status==='Concluída'?'done':'')+'"><input type="checkbox" '+(a.status==='Concluída'?'checked':'')+' onchange="toggleCertCorrectiveAction(\''+e.id+'\',\''+a.id+'\',this.checked)" title="Marcar como concluída"><div class="action-text">'+escHtml(a.text)+'<small>'+escHtml(a.status||'Em andamento')+' · '+(a.createdAt?new Date(a.createdAt).toLocaleDateString('pt-BR'):'')+'</small></div><button class="btn ghost eq-delete-btn" type="button" onclick="deleteCertCorrectiveAction(\''+e.id+'\',\''+a.id+'\')">Excluir</button></div>').join(''):'<div class="eq-action-item">Nenhuma ação corretiva cadastrada.</div>')+'</div></div></div>';
   }).join('')||'<div style="color:var(--mut);padding:10px">Nenhum equipamento encontrado.</div>';
+}
+function toggleCertHistory(id){const el=document.getElementById('cert-history-'+id);if(el)el.hidden=!el.hidden}
+function addCertCorrectiveAction(id){
+  const e=data.find(x=>x.id===id);if(!e)return;
+  const input=document.getElementById('cert-action-input-'+id);
+  const text=(input?.value||'').trim();if(!text)return toast('Descreva a ação corretiva.');
+  if(!Array.isArray(e.correctiveActions))e.correctiveActions=[];
+  e.correctiveActions.push({id:'ACT-'+Date.now()+'-'+Math.random().toString(36).slice(2,7),text,status:'Em andamento',createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()});
+  addEqHistory(e,'Ação corretiva adicionada',text);persistData();render();
+  const panel=document.getElementById('cert-history-'+id);if(panel)panel.hidden=false;
+}
+function toggleCertCorrectiveAction(id,actionId,checked){
+  const e=data.find(x=>x.id===id),a=e?.correctiveActions?.find(x=>x.id===actionId);if(!a)return;
+  a.status=checked?'Concluída':'Em andamento';a.updatedAt=new Date().toISOString();
+  addEqHistory(e,'Ação corretiva atualizada',`${a.text} — ${a.status}`);persistData();render();
+  const panel=document.getElementById('cert-history-'+id);if(panel)panel.hidden=false;
+}
+function deleteCertCorrectiveAction(id,actionId){
+  const e=data.find(x=>x.id===id);if(!e)return;const a=e.correctiveActions?.find(x=>x.id===actionId);if(!a)return;
+  if(!confirm('Excluir esta ação corretiva?'))return;
+  e.correctiveActions=e.correctiveActions.filter(x=>x.id!==actionId);addEqHistory(e,'Ação corretiva excluída',a.text);persistData();render();
+  const panel=document.getElementById('cert-history-'+id);if(panel)panel.hidden=false;
 }
 let certEditing={eqId:null,index:null};
 function fillCertEquipSelect(selected){const sel=document.getElementById('cf_eq');sel.innerHTML=data.map(e=>`<option value="${e.id}">${escHtml(e.nome)} — ${escHtml(e.floc||'sem FLOC')}</option>`).join('');if(selected)sel.value=selected}
@@ -760,14 +879,16 @@ async function saveCert(){
   const cal=document.getElementById('cf_cal').value,meses=Math.max(1,parseInt(document.getElementById('cf_months').value||12));if(!cal)return toast('Informe a data de calibração');calcCertVal();const val=document.getElementById('cf_val').value;if(!val)return toast('Não foi possível calcular o vencimento');
   if(!Array.isArray(e.certs))e.certs=[];
   let fileId=old?.fileId||'';
-  if(file){fileId='CERT-'+Date.now()+'-'+Math.random().toString(36).slice(2);await idbPut(fileId,file)}
-  const c={nome:file?file.name:(old?.nome||'Certificado.pdf'),cal,val,meses,fornecedor:document.getElementById('cf_forn').value.trim(),obs:document.getElementById('cf_obs').value.trim(),assinadoEngenharia:document.getElementById('cf_assinado').checked,fileId,fileName:file?.name||old?.fileName||'',fileType:file?.type||old?.fileType||'application/pdf'};
-  if(index!==null&&oldEq&&oldEq.id===e.id)e.certs[index]=c;else e.certs.push(c);
+  let storageMeta={storagePath:old?.storagePath||'',fileUrl:old?.fileUrl||''};
+  if(file){fileId='CERT-'+Date.now()+'-'+Math.random().toString(36).slice(2);await idbPut(fileId,file);if(window.sheFirebaseUploadCertificate){try{storageMeta=await window.sheFirebaseUploadCertificate(e.id,fileId,file)}catch(err){console.warn('PDF salvo localmente; upload Firebase pendente',err)}}}
+  const c={nome:file?file.name:(old?.nome||'Certificado.pdf'),cal,val,meses,fornecedor:document.getElementById('cf_forn').value.trim(),obs:document.getElementById('cf_obs').value.trim(),assinadoEngenharia:document.getElementById('cf_assinado').checked,fileId,fileName:file?.name||old?.fileName||'',fileType:file?.type||old?.fileType||'application/pdf',...storageMeta};
+  if(index!==null&&oldEq&&oldEq.id===e.id){e.certs[index]=c;addEqHistory(e,'Certificado atualizado',c.nome+' · Vencimento '+fmt(c.val));}
+  else {e.certs.push(c);addEqHistory(e,'Certificado adicionado',c.nome+' · Vencimento '+fmt(c.val));}
   persistData();closeCertM();certs();toast((index!==null?'Certificado atualizado: ':'Certificado adicionado: ')+c.nome)
 }
 function editCert(id,index){openCertM(id,index)}
-async function removeCert(id,index){const e=data.find(x=>x.id===id);if(!e||!Array.isArray(e.certs))return;const c=e.certs[index];if(c?.fileId)try{await idbDel(c.fileId)}catch(_){}e.certs.splice(index,1);persistData();certs();toast('Certificado removido.')}
-async function toggleEngineering(id,index,checked){const e=data.find(x=>x.id===id);if(!e?.certs?.[index])return;e.certs[index].assinadoEngenharia=checked;persistData();certs();toast(checked?'Certificado marcado como OK pela Engenharia.':'Assinatura da Engenharia removida.')}
+async function removeCert(id,index){const e=data.find(x=>x.id===id);if(!e||!Array.isArray(e.certs))return;const c=e.certs[index];if(!confirm('Excluir o certificado '+(c?.nome||'selecionado')+'?'))return;if(c?.fileId)try{await idbDel(c.fileId)}catch(_){}e.certs.splice(index,1);addEqHistory(e,'Certificado excluído',c?.nome||'Certificado');persistData();certs();toast('Certificado removido.')}
+async function toggleEngineering(id,index,checked){const e=data.find(x=>x.id===id);if(!e?.certs?.[index])return;e.certs[index].assinadoEngenharia=checked;addEqHistory(e,'Validação de Engenharia',`${e.certs[index].nome||'Certificado'} — ${checked?'assinado/validado':'assinatura removida'}`);persistData();certs();toast(checked?'Certificado marcado como OK pela Engenharia.':'Assinatura da Engenharia removida.')}
 function attach(id,inp){const f=inp.files[0];if(!f)return;openCertM(id);document.getElementById('cf_file').files=inp.files}
 
 function addMonthsSafe(dateStr, months){
@@ -800,10 +921,19 @@ function openEdit(id){
 function closeM(){m.classList.remove('open')}
 function saveEq(){
   if(!f_nome.value.trim())return toast('Informe o nome do equipamento');
+  if(!editing&&!requireEquipmentPassword('adicionar'))return;
   calcEqNext();
   const o={nome:f_nome.value.trim(),floc:f_floc.value.trim(),cat:f_cat.value,ult:f_ult.value,prox:f_prox.value,estrategia:f_estrat.value,customMeses:f_estrat.value==='custom'?Number(f_custom.value||0):'',resp:f_resp.value,forn:f_forn.value,plano:f_plano.value.trim()||extractPlan(f_obs.value),hhAtividade:Math.max(0,Number(String(f_hh.value||'0').replace(',','.'))||0),tipoAtividade:f_tipo.value,evidenciaSAP:f_evid.value.trim(),obs:f_obs.value};
-  if(editing)Object.assign(data.find(x=>x.id===editing),o);
-  else data.push({id:'EQ'+String(data.length+1).padStart(3,'0'),certs:[],...o});
+  if(editing){
+    const target=data.find(x=>x.id===editing);if(!target)return;
+    const changed=Object.keys(o).filter(k=>String(target[k]??'')!==String(o[k]??''));
+    Object.assign(target,o);
+    if(changed.length)addEqHistory(target,'Equipamento alterado',`Campos: ${changed.join(', ')}`);
+  }else{
+    const created={id:'EQ'+String(data.length+1).padStart(3,'0'),certs:[],history:[],correctiveActions:[],...o};
+    addEqHistory(created,'Equipamento cadastrado',`Cadastro de ${created.nome} (${created.floc||'sem FLOC'})`);
+    data.push(created);
+  }
   persistData();closeM();render();toast('Equipamento salvo. Próxima execução calculada pela estratégia.');
 }
 
@@ -817,12 +947,13 @@ function toISO(v){
 const norm=s=>String(s).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim();
 document.getElementById('xfile').addEventListener('change',async ev=>{
   const f=ev.target.files[0];if(!f)return;
+  if(!requireEquipmentPassword('importar/substituir a lista de')){ev.target.value='';return;}
   const wb=XLSX.read(await f.arrayBuffer(),{type:'array'});
   const rowsX=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{defval:''});
   const get=(r,...ks)=>{for(const k of Object.keys(r))if(ks.includes(norm(k)))return r[k];return''};
   const out=rowsX.map((r,i)=>({id:'EQ'+String(i+1).padStart(3,'0'),nome:String(get(r,'equipamento','descricao','nome')),floc:String(get(r,'floc','local de instalacao')),
     cat:String(get(r,'categoria','cat','tipo')).toUpperCase().slice(0,3)||'SHE',ult:toISO(get(r,'ultima','ultima execucao')),prox:toISO(get(r,'proxima','proxima execucao','vencimento')),
-    resp:String(get(r,'responsavel')),forn:String(get(r,'fornecedor')),plano:String(get(r,'plano','plano sap','numero do plano','nº plano')),hhAtividade:Number(get(r,'hh atividade','hh','horas atividade','hh planejado'))||0,tipoAtividade:String(get(r,'tipo atividade','tipo','disciplina')).trim(),evidenciaSAP:String(get(r,'evidencia sap','evidencia','om','certificado')),obs:String(get(r,'observacoes','obs')),certs:[]})).filter(e=>e.nome);
+    resp:String(get(r,'responsavel')),forn:String(get(r,'fornecedor')),plano:String(get(r,'plano','plano sap','numero do plano','nº plano')),hhAtividade:Number(get(r,'hh atividade','hh','horas atividade','hh planejado'))||0,tipoAtividade:String(get(r,'tipo atividade','tipo','disciplina')).trim(),evidenciaSAP:String(get(r,'evidencia sap','evidencia','om','certificado')),obs:String(get(r,'observacoes','obs')),certs:[],history:[],correctiveActions:[]})).filter(e=>e.nome);
   if(!out.length){impMsg.textContent='Nenhuma linha reconhecida. Confira os nomes das colunas.';return}
   data=out;persistData();render();impMsg.innerHTML=`✅ ${out.length} equipamentos importados de <b>${f.name}</b>. Veja nas abas Painel e Equipamentos.`;
 });
@@ -830,7 +961,7 @@ function exportXlsx(){
   const ws=XLSX.utils.json_to_sheet(data.map(e=>({Equipamento:e.nome,FLOC:e.floc,Categoria:e.cat,'Última':e.ult,'Próxima':e.prox,'Responsável':e.resp,Fornecedor:e.forn,'Plano SAP':e.plano||extractPlan(e.obs),'HH atividade':Number(e.hhAtividade)||0,'Tipo atividade':e.tipoAtividade||'','Evidência SAP (OM / Cert.)':e.evidenciaSAP||'',Estratégia:e.estrategia==='custom'?`Personalizada (${e.customMeses} meses)`:({'1':'Mensal','2':'Bimestral','3':'Trimestral','4':'Quadrimestral','6':'Semestral','12':'Anual'}[e.estrategia]||''),Status:status(e),'Observações':e.obs})));
   const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'SHE Crítico');XLSX.writeFile(wb,'SHE_Critico.xlsx');
 }
-function saveCfg(){try{JSON.parse(cfg.value);localStorage.setItem('fbcfg',cfg.value);toast('Configuração guardada neste navegador')}catch(e){toast('JSON inválido')}}
+function saveCfg(){try{const c=JSON.parse(document.getElementById('cfg').value);localStorage.setItem('fbcfg',JSON.stringify(c));if(window.sheFirebaseConnectTest)window.sheFirebaseConnectTest(c);else toast('Firebase ainda está carregando.')}catch(e){toast('JSON inválido')}}
 
 
 /* ---------- filtros do painel ---------- */
@@ -1034,7 +1165,7 @@ document.getElementById('certYear').innerHTML='<option value="">Todos os anos</o
 ['certQ','certCat','certYear','certStatus','certCoverage'].forEach(i=>document.getElementById(i).addEventListener('input',certs));
 m.addEventListener('click',e=>{if(e.target===m)closeM()});
 restoreData();
-data.forEach(e=>{if(e.hhAtividade===undefined)e.hhAtividade=0;if(!e.tipoAtividade)e.tipoAtividade='';if(!e.plano)e.plano=extractPlan(e.obs)});
+data.forEach(e=>{if(e.hhAtividade===undefined)e.hhAtividade=0;if(!e.tipoAtividade)e.tipoAtividade='';if(!e.plano)e.plano=extractPlan(e.obs);if(!Array.isArray(e.history))e.history=[];if(!Array.isArray(e.correctiveActions))e.correctiveActions=[];if(!Array.isArray(e.certs))e.certs=[];});
 
 
 document.querySelectorAll('#catFilters .filterbtn').forEach(b=>b.addEventListener('click',()=>{
@@ -1049,118 +1180,121 @@ render();
 </div>
 
 <script>
-/* ===== AUTENTICAÇÃO SIMPLES DSM 2026 =====
-   Observação: como este é um HTML estático, a senha fica no código-fonte.
-   Isso é adequado apenas para um controle simples de acesso.
-*/
+/* ===== AUTENTICAÇÃO FIREBASE DSM 2026 ===== */
 const IRIS_LOGIN = "DSM 2026";
-const IRIS_PASSWORD = "SHE@Critico2026!";
-
-function doLogin(){
-  const user = document.getElementById("loginUser").value.trim();
-  const pass = document.getElementById("loginPass").value;
-  const error = document.getElementById("loginError");
-
-  if(user === IRIS_LOGIN && pass === IRIS_PASSWORD){
-    sessionStorage.setItem("iris_auth","1");
-    document.body.classList.add("logged-in");
-    error.textContent = "";
-    document.getElementById("loginPass").value = "";
-  }else{
-    error.textContent = "Usuário ou senha inválidos.";
-    document.getElementById("loginPass").value = "";
-    document.getElementById("loginPass").focus();
-  }
+async function doLogin(){
+  const user=document.getElementById("loginUser").value.trim();
+  const pass=document.getElementById("loginPass").value;
+  const error=document.getElementById("loginError");
+  if(user!==IRIS_LOGIN){error.textContent="Usuário inválido. Use DSM 2026.";return;}
+  if(!window.sheFirebaseLogin){error.textContent="Firebase ainda está carregando. Aguarde alguns segundos e tente novamente.";return;}
+  const remember=document.getElementById("rememberLogin")?.checked;
+  const btn=document.querySelector('#loginForm button[type="submit"]');if(btn){btn.disabled=true;btn.textContent='Conectando...';}
+  try{
+    await window.sheFirebaseLogin(pass);
+    sessionStorage.setItem("iris_auth","1");sessionStorage.setItem("iris_user",user);
+    if(remember){localStorage.setItem("iris_remember_user",user)}else{localStorage.removeItem("iris_remember_user")}
+    document.body.classList.add("logged-in");error.textContent="";document.getElementById("loginPass").value="";
+  }catch(err){console.error(err);error.textContent=window.sheFirebaseErrorMessage?window.sheFirebaseErrorMessage(err):"Não foi possível conectar ao Firebase. Confira a configuração e a conta mestre.";document.getElementById("loginPass").value="";document.getElementById("loginPass").focus();}
+  finally{if(btn){btn.disabled=false;btn.textContent='Entrar';}}
 }
-
 function logoutIRIS(){
-  sessionStorage.removeItem("iris_auth");
-  document.body.classList.remove("logged-in");
-  document.getElementById("loginUser").value = "";
-  document.getElementById("loginPass").value = "";
-  document.getElementById("loginError").textContent = "";
-  document.getElementById("loginUser").focus();
+  if(window.sheFirebaseLogout)window.sheFirebaseLogout();
+  sessionStorage.removeItem("iris_auth");sessionStorage.removeItem("iris_user");document.body.classList.remove("logged-in");
+  document.getElementById("loginUser").value=localStorage.getItem("iris_remember_user")||"";document.getElementById("loginPass").value="";document.getElementById("loginError").textContent="";document.getElementById("loginUser").focus();
 }
-
 function checkIRISAuth(){
-  if(sessionStorage.getItem("iris_auth") === "1"){
-    document.body.classList.add("logged-in");
-  }
+  const savedUser=localStorage.getItem("iris_remember_user");
+  const userInput=document.getElementById("loginUser");
+  const rememberInput=document.getElementById("rememberLogin");
+  if(savedUser&&userInput){userInput.value=savedUser;if(rememberInput)rememberInput.checked=true;}
+  if(sessionStorage.getItem("iris_auth")==="1")document.body.classList.add("logged-in");
 }
-
-document.addEventListener("keydown", function(e){
-  if(e.key === "Enter" && !document.body.classList.contains("logged-in")){
-    doLogin();
-  }
-});
-
-document.addEventListener("DOMContentLoaded", checkIRISAuth);
-
-/* ===== BUDGET SHE CRÍTICO MULTIANUAL — DEMANDAS OFICIAIS ===== */
-const budgetMonths=['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
-const budgetInitial = [{"month": "Jan/27", "planned": 271821.57}, {"month": "Fev/27", "planned": 217820.71}, {"month": "Mar/27", "planned": 279560.71}, {"month": "Abr/27", "planned": 176001.57}, {"month": "Mai/27", "planned": 146020.71}, {"month": "Jun/27", "planned": 239860.71}, {"month": "Jul/27", "planned": 183221.57}, {"month": "Ago/27", "planned": 182370.71}, {"month": "Set/27", "planned": 230758.87}, {"month": "Out/27", "planned": 293067.73}, {"month": "Nov/27", "planned": 133768.87}, {"month": "Dez/27", "planned": 1433030.53}];
-const budgetOfficialDemands = [{"id":"1-9","category":"SHE","name":"WI INSPEÇÕES","supplier":"WI INSPEÇÕES","month":8,"planned":13000.0,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"1-10","category":"SHE","name":"WI INSPEÇÕES","supplier":"WI INSPEÇÕES","month":9,"planned":50000.0,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"1-12","category":"SHE","name":"WI INSPEÇÕES","supplier":"WI INSPEÇÕES","month":11,"planned":800000.0,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"2-1","category":"SHE","name":"Kit de Reparo equivalente a 5 valvulas psv + calibração / Reparo de Forninho Presys + compra de equipamentos para bancada (projeto interno)","supplier":"GESTÃO DE CALIBRAÇÃO","month":0,"planned":16000.0,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"2-2","category":"SHE","name":"Kit de Reparo equivalente a 5 valvulas psv + calibração / Reparo de Forninho Presys + compra de equipamentos para bancada (projeto interno)","supplier":"GESTÃO DE CALIBRAÇÃO","month":1,"planned":13000.0,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"2-3","category":"SHE","name":"Kit de Reparo equivalente a 5 valvulas psv + calibração / Reparo de Forninho Presys + compra de equipamentos para bancada (projeto interno)","supplier":"GESTÃO DE CALIBRAÇÃO","month":2,"planned":13000.0,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"2-5","category":"SHE","name":"Kit de Reparo equivalente a 5 valvulas psv + calibração / Reparo de Forninho Presys + compra de equipamentos para bancada (projeto interno)","supplier":"GESTÃO DE CALIBRAÇÃO","month":4,"planned":16000.0,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"2-6","category":"SHE","name":"Kit de Reparo equivalente a 5 valvulas psv + calibração / Reparo de Forninho Presys + compra de equipamentos para bancada (projeto interno)","supplier":"GESTÃO DE CALIBRAÇÃO","month":5,"planned":13000.0,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"2-7","category":"SHE","name":"Kit de Reparo equivalente a 5 valvulas psv + calibração / Reparo de Forninho Presys + compra de equipamentos para bancada (projeto interno)","supplier":"GESTÃO DE CALIBRAÇÃO","month":6,"planned":13000.0,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"2-9","category":"SHE","name":"Kit de Reparo equivalente a 5 valvulas psv + calibração / Reparo de Forninho Presys + compra de equipamentos para bancada (projeto interno)","supplier":"GESTÃO DE CALIBRAÇÃO","month":8,"planned":16000.0,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"2-10","category":"SHE","name":"Kit de Reparo equivalente a 5 valvulas psv + calibração / Reparo de Forninho Presys + compra de equipamentos para bancada (projeto interno)","supplier":"GESTÃO DE CALIBRAÇÃO","month":9,"planned":13000.0,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"2-11","category":"SHE","name":"Kit de Reparo equivalente a 5 valvulas psv + calibração / Reparo de Forninho Presys + compra de equipamentos para bancada (projeto interno)","supplier":"GESTÃO DE CALIBRAÇÃO","month":10,"planned":13000.0,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"3-1","category":"SHE","name":"KONUS","supplier":"KONUS","month":0,"planned":70000.0,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"4-1","category":"SHE","name":"KONUS CORREÇÕES","supplier":"KONUS CORREÇÕES","month":0,"planned":9200.0,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"5-1","category":"SHE","name":"ENDRESS HAUSER","supplier":"ENDRESS HAUSER","month":0,"planned":6085.89,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"5-2","category":"SHE","name":"ENDRESS HAUSER","supplier":"ENDRESS HAUSER","month":1,"planned":6085.89,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"5-3","category":"SHE","name":"ENDRESS HAUSER","supplier":"ENDRESS HAUSER","month":2,"planned":6085.89,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"5-4","category":"SHE","name":"ENDRESS HAUSER","supplier":"ENDRESS HAUSER","month":3,"planned":6085.89,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"5-5","category":"SHE","name":"ENDRESS HAUSER","supplier":"ENDRESS HAUSER","month":4,"planned":6085.89,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"5-6","category":"SHE","name":"ENDRESS HAUSER","supplier":"ENDRESS HAUSER","month":5,"planned":6085.89,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"5-7","category":"SHE","name":"ENDRESS HAUSER","supplier":"ENDRESS HAUSER","month":6,"planned":6085.89,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"5-8","category":"SHE","name":"ENDRESS HAUSER","supplier":"ENDRESS HAUSER","month":7,"planned":6085.89,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"5-9","category":"SHE","name":"ENDRESS HAUSER","supplier":"ENDRESS HAUSER","month":8,"planned":6085.89,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"5-10","category":"SHE","name":"ENDRESS HAUSER","supplier":"ENDRESS HAUSER","month":9,"planned":6085.89,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"5-11","category":"SHE","name":"ENDRESS HAUSER","supplier":"ENDRESS HAUSER","month":10,"planned":6085.89,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"5-12","category":"SHE","name":"ENDRESS HAUSER","supplier":"ENDRESS HAUSER","month":11,"planned":6085.89,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"6-8","category":"SHE","name":"HOERBIGER","supplier":"HOERBIGER","month":7,"planned":22000.0,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"6-12","category":"SHE","name":"HOERBIGER","supplier":"HOERBIGER","month":11,"planned":155000.0,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"7-3","category":"SHE","name":"DESMAG","supplier":"DESMAG","month":2,"planned":19500.0,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"8-12","category":"SHE","name":"WEISHAUPT","supplier":"WEISHAUPT","month":11,"planned":12600.0,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"9-12","category":"ERSA","name":"FILTRO MANGA EXTERNO APOLLO","supplier":"FILTRO MANGA EXTERNO APOLLO","month":11,"planned":144161.66,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"10-12","category":"ERSA","name":"FILTRO MANGA INTERNO APOLLO","supplier":"FILTRO MANGA INTERNO APOLLO","month":11,"planned":25000.0,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"11-3","category":"ERSA","name":"FILTRO MANGA MOEGAS DCP","supplier":"FILTRO MANGA MOEGAS DCP","month":2,"planned":58500.0,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"11-6","category":"ERSA","name":"FILTRO MANGA MOEGAS DCP","supplier":"FILTRO MANGA MOEGAS DCP","month":5,"planned":58500.0,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"11-9","category":"ERSA","name":"FILTRO MANGA MOEGAS DCP","supplier":"FILTRO MANGA MOEGAS DCP","month":8,"planned":58500.0,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"11-12","category":"ERSA","name":"FILTRO MANGA MOEGAS DCP","supplier":"FILTRO MANGA MOEGAS DCP","month":11,"planned":58500.0,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"12-3","category":"SHE","name":"FOCUS","supplier":"FOCUS","month":2,"planned":73000.0,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"13-2","category":"SHE","name":"GEABS","supplier":"GEABS","month":1,"planned":5250.0,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"13-5","category":"SHE","name":"GEABS","supplier":"GEABS","month":4,"planned":9450.0,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"13-7","category":"SHE","name":"GEABS","supplier":"GEABS","month":6,"planned":6300.0,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"13-12","category":"SHE","name":"GEABS","supplier":"GEABS","month":11,"planned":70000.0,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"14-10","category":"QUA","name":"MAGTEK ","supplier":"MAGTEK ","month":9,"planned":12600.0,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":"Serviço de Medições em Placas Magneticas considerando mão de obra, Certificação técnica"},{"id":"15-11","category":"Sem categoria","name":"NEDERMAN","supplier":"NEDERMAN","month":10,"planned":8000.0,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"16-6","category":"SOB","name":"PPI","supplier":"PPI","month":5,"planned":17000.0,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"17-1","category":"SHE","name":"REVCAL","supplier":"REVCAL","month":0,"planned":2500.0,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"17-4","category":"SHE","name":"REVCAL","supplier":"REVCAL","month":3,"planned":2200.0,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"17-6","category":"SHE","name":"REVCAL","supplier":"REVCAL","month":5,"planned":800.0,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"17-7","category":"SHE","name":"REVCAL","supplier":"REVCAL","month":6,"planned":3800.0,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"17-8","category":"SHE","name":"REVCAL","supplier":"REVCAL","month":7,"planned":6800.0,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"17-10","category":"SHE","name":"REVCAL","supplier":"REVCAL","month":9,"planned":2000.0,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"17-12","category":"SHE","name":"REVCAL","supplier":"REVCAL","month":11,"planned":1500.0,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"18-12","category":"Sem categoria","name":"TECHNOFAN","supplier":"TECHNOFAN","month":11,"planned":8200.0,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"19-1","category":"Sem categoria","name":"TECNOSERVICE ","supplier":"TECNOSERVICE ","month":0,"planned":20000.0,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"20-8","category":"SHE","name":"YORGOS","supplier":"YORGOS","month":7,"planned":7000.0,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"21-1","category":"SHE","name":"YORGOS","supplier":"YORGOS","month":0,"planned":5634.82,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"21-2","category":"SHE","name":"YORGOS","supplier":"YORGOS","month":1,"planned":5634.82,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"21-3","category":"SHE","name":"YORGOS","supplier":"YORGOS","month":2,"planned":5634.82,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"21-4","category":"SHE","name":"YORGOS","supplier":"YORGOS","month":3,"planned":5634.82,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"21-5","category":"SHE","name":"YORGOS","supplier":"YORGOS","month":4,"planned":5634.82,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"21-6","category":"SHE","name":"YORGOS","supplier":"YORGOS","month":5,"planned":5634.82,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"21-7","category":"SHE","name":"YORGOS","supplier":"YORGOS","month":6,"planned":5634.82,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"21-8","category":"SHE","name":"YORGOS","supplier":"YORGOS","month":7,"planned":5634.82,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"21-9","category":"SHE","name":"YORGOS","supplier":"YORGOS","month":8,"planned":6832.98,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"21-10","category":"SHE","name":"YORGOS","supplier":"YORGOS","month":9,"planned":6832.98,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"21-11","category":"SHE","name":"YORGOS","supplier":"YORGOS","month":10,"planned":6832.98,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"21-12","category":"SHE","name":"YORGOS","supplier":"YORGOS","month":11,"planned":6832.98,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"22-1","category":"SHE","name":"YURI AGUA","supplier":"YURI AGUA","month":0,"planned":6500.0,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":"Override para Preventiva em Geradores de Emergencia "},{"id":"22-7","category":"SHE","name":"YURI AGUA","supplier":"YURI AGUA","month":6,"planned":6500.0,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":"Override para Preventiva em Geradores de Emergencia "},{"id":"23-1","category":"ERSA","name":"GERADOR DE EMERG.","supplier":"GERADOR DE EMERG.","month":0,"planned":8820.0,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":"Materiais Ersa para Preventiva Geradores de Emergencia"},{"id":"23-7","category":"ERSA","name":"GERADOR DE EMERG.","supplier":"GERADOR DE EMERG.","month":6,"planned":8820.0,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":"Materiais Ersa para Preventiva Geradores de Emergencia"},{"id":"24-1","category":"SOB","name":"CPFL","supplier":"CPFL","month":0,"planned":13150.0,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"24-2","category":"SOB","name":"CPFL","supplier":"CPFL","month":1,"planned":66150.0,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"24-3","category":"SOB","name":"CPFL","supplier":"CPFL","month":2,"planned":13150.0,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"24-4","category":"SOB","name":"CPFL","supplier":"CPFL","month":3,"planned":13150.0,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"24-5","category":"SOB","name":"CPFL","supplier":"CPFL","month":4,"planned":13150.0,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"24-6","category":"SOB","name":"CPFL","supplier":"CPFL","month":5,"planned":13150.0,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"24-7","category":"SOB","name":"CPFL","supplier":"CPFL","month":6,"planned":13150.0,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"24-8","category":"SOB","name":"CPFL","supplier":"CPFL","month":7,"planned":13150.0,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"24-9","category":"SOB","name":"CPFL","supplier":"CPFL","month":8,"planned":13150.0,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"24-10","category":"SOB","name":"CPFL","supplier":"CPFL","month":9,"planned":13150.0,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"24-11","category":"SOB","name":"CPFL","supplier":"CPFL","month":10,"planned":13150.0,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"24-12","category":"SOB","name":"CPFL","supplier":"CPFL","month":11,"planned":13150.0,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"25-1","category":"QUA","name":"ALFA","supplier":"ALFA","month":0,"planned":14700.0,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"25-2","category":"QUA","name":"ALFA","supplier":"ALFA","month":1,"planned":14700.0,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"25-3","category":"QUA","name":"ALFA","supplier":"ALFA","month":2,"planned":14700.0,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"25-4","category":"QUA","name":"ALFA","supplier":"ALFA","month":3,"planned":14700.0,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"25-5","category":"QUA","name":"ALFA","supplier":"ALFA","month":4,"planned":14700.0,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"25-6","category":"QUA","name":"ALFA","supplier":"ALFA","month":5,"planned":14700.0,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"25-7","category":"QUA","name":"ALFA","supplier":"ALFA","month":6,"planned":14700.0,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"25-8","category":"QUA","name":"ALFA","supplier":"ALFA","month":7,"planned":14700.0,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"25-9","category":"QUA","name":"ALFA","supplier":"ALFA","month":8,"planned":14700.0,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"25-10","category":"QUA","name":"ALFA","supplier":"ALFA","month":9,"planned":14700.0,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"25-11","category":"QUA","name":"ALFA","supplier":"ALFA","month":10,"planned":14700.0,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"25-12","category":"QUA","name":"ALFA","supplier":"ALFA","month":11,"planned":14700.0,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"26-1","category":"ERSA","name":"INDICADOR PESAG MICROP 0/4-20MA - 3060031046 (R$ 3.349,29 Un.) / SUPORTE APOIO MANDRITEC MAND335 - 3061051361 (R$ 360,30 Un.) / CELULA DE CARGA DIVERSAS  - (MÉDIA DE 2 TROCAS R$ 8.941,82)","supplier":"ALFA CORREÇÕES","month":0,"planned":16730.86,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"26-4","category":"ERSA","name":"INDICADOR PESAG MICROP 0/4-20MA - 3060031046 (R$ 3.349,29 Un.) / SUPORTE APOIO MANDRITEC MAND335 - 3061051361 (R$ 360,30 Un.) / CELULA DE CARGA DIVERSAS  - (MÉDIA DE 2 TROCAS R$ 8.941,82)","supplier":"ALFA CORREÇÕES","month":3,"planned":16730.86,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"26-7","category":"ERSA","name":"INDICADOR PESAG MICROP 0/4-20MA - 3060031046 (R$ 3.349,29 Un.) / SUPORTE APOIO MANDRITEC MAND335 - 3061051361 (R$ 360,30 Un.) / CELULA DE CARGA DIVERSAS  - (MÉDIA DE 2 TROCAS R$ 8.941,82)","supplier":"ALFA CORREÇÕES","month":6,"planned":16730.86,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"26-10","category":"ERSA","name":"INDICADOR PESAG MICROP 0/4-20MA - 3060031046 (R$ 3.349,29 Un.) / SUPORTE APOIO MANDRITEC MAND335 - 3061051361 (R$ 360,30 Un.) / CELULA DE CARGA DIVERSAS  - (MÉDIA DE 2 TROCAS R$ 8.941,82)","supplier":"ALFA CORREÇÕES","month":9,"planned":16730.86,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"27-10","category":"QUA","name":"COMTEC","supplier":"COMTEC","month":9,"planned":23268.0,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"28-10","category":"SHE","name":"RUD","supplier":"RUD","month":9,"planned":17200.0,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"30-7","category":"SOB","name":"ESD","supplier":"ESD","month":6,"planned":6000.0,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"31-2","category":"SOB","name":"PONTEC","supplier":"PONTEC","month":1,"planned":35000.0,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"31-4","category":"SOB","name":"PONTEC","supplier":"PONTEC","month":3,"planned":35000.0,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"31-6","category":"SOB","name":"PONTEC","supplier":"PONTEC","month":5,"planned":35000.0,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"31-8","category":"SOB","name":"PONTEC","supplier":"PONTEC","month":7,"planned":35000.0,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"31-10","category":"SOB","name":"PONTEC","supplier":"PONTEC","month":9,"planned":35000.0,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"31-12","category":"SOB","name":"PONTEC","supplier":"PONTEC","month":11,"planned":35000.0,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"32-1","category":"SHE","name":"KIDDE","supplier":"KIDDE","month":0,"planned":10500.0,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"32-4","category":"SHE","name":"KIDDE","supplier":"KIDDE","month":3,"planned":10500.0,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"32-7","category":"SHE","name":"KIDDE","supplier":"KIDDE","month":6,"planned":10500.0,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"32-10","category":"SHE","name":"KIDDE","supplier":"KIDDE","month":9,"planned":10500.0,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"33-5","category":"QUA","name":"SUNNYVALE","supplier":"SUNNYVALE","month":4,"planned":9000.0,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"34-1","category":"NLAG","name":"SIL(LUB + VIB)","supplier":"SIL(LUB + VIB)","month":0,"planned":32000.0,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"34-2","category":"NLAG","name":"SIL(LUB + VIB)","supplier":"SIL(LUB + VIB)","month":1,"planned":32000.0,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"34-3","category":"NLAG","name":"SIL(LUB + VIB)","supplier":"SIL(LUB + VIB)","month":2,"planned":32000.0,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"34-4","category":"NLAG","name":"SIL(LUB + VIB)","supplier":"SIL(LUB + VIB)","month":3,"planned":32000.0,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"34-5","category":"NLAG","name":"SIL(LUB + VIB)","supplier":"SIL(LUB + VIB)","month":4,"planned":32000.0,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"34-6","category":"NLAG","name":"SIL(LUB + VIB)","supplier":"SIL(LUB + VIB)","month":5,"planned":32000.0,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"34-7","category":"NLAG","name":"SIL(LUB + VIB)","supplier":"SIL(LUB + VIB)","month":6,"planned":32000.0,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"34-8","category":"NLAG","name":"SIL(LUB + VIB)","supplier":"SIL(LUB + VIB)","month":7,"planned":32000.0,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"34-9","category":"NLAG","name":"SIL(LUB + VIB)","supplier":"SIL(LUB + VIB)","month":8,"planned":32000.0,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"34-10","category":"NLAG","name":"SIL(LUB + VIB)","supplier":"SIL(LUB + VIB)","month":9,"planned":32000.0,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"34-11","category":"NLAG","name":"SIL(LUB + VIB)","supplier":"SIL(LUB + VIB)","month":10,"planned":32000.0,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"34-12","category":"NLAG","name":"SIL(LUB + VIB)","supplier":"SIL(LUB + VIB)","month":11,"planned":32000.0,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"35-1","category":"QUA","name":"PORTAS FLEXIVEIS","supplier":"PORTAS FLEXIVEIS","month":0,"planned":40000.0,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"35-2","category":"QUA","name":"PORTAS FLEXIVEIS","supplier":"PORTAS FLEXIVEIS","month":1,"planned":40000.0,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"35-3","category":"QUA","name":"PORTAS FLEXIVEIS","supplier":"PORTAS FLEXIVEIS","month":2,"planned":40000.0,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"35-4","category":"QUA","name":"PORTAS FLEXIVEIS","supplier":"PORTAS FLEXIVEIS","month":3,"planned":40000.0,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"35-5","category":"QUA","name":"PORTAS FLEXIVEIS","supplier":"PORTAS FLEXIVEIS","month":4,"planned":40000.0,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"35-6","category":"QUA","name":"PORTAS FLEXIVEIS","supplier":"PORTAS FLEXIVEIS","month":5,"planned":40000.0,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"35-7","category":"QUA","name":"PORTAS FLEXIVEIS","supplier":"PORTAS FLEXIVEIS","month":6,"planned":40000.0,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"35-8","category":"QUA","name":"PORTAS FLEXIVEIS","supplier":"PORTAS FLEXIVEIS","month":7,"planned":40000.0,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"35-9","category":"QUA","name":"PORTAS FLEXIVEIS","supplier":"PORTAS FLEXIVEIS","month":8,"planned":40000.0,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"35-10","category":"QUA","name":"PORTAS FLEXIVEIS","supplier":"PORTAS FLEXIVEIS","month":9,"planned":40000.0,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"35-11","category":"QUA","name":"PORTAS FLEXIVEIS","supplier":"PORTAS FLEXIVEIS","month":10,"planned":40000.0,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"35-12","category":"QUA","name":"PORTAS FLEXIVEIS","supplier":"PORTAS FLEXIVEIS","month":11,"planned":40000.0,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"36-9","category":"SHE","name":"REMBE","supplier":"REMBE","month":8,"planned":26500.0,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"37-3","category":"SOB","name":"BAUKO","supplier":"BAUKO","month":2,"planned":3990.0,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"37-6","category":"SOB","name":"BAUKO","supplier":"BAUKO","month":5,"planned":3990.0,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"37-9","category":"SOB","name":"BAUKO","supplier":"BAUKO","month":8,"planned":3990.0,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""},{"id":"37-12","category":"SOB","name":"BAUKO","supplier":"BAUKO","month":11,"planned":10300.0,"completed":false,"actual":0,"saving":0,"savingReason":"","observations":""}];
-const budgetStoreKey='she_budget_multiyear_v3';
-let budgetAll=JSON.parse(localStorage.getItem(budgetStoreKey)||'{}');
-function budgetMakeYear(year){return budgetMonths.map((m,i)=>({month:`${m}/${String(year).slice(-2)}`,planned:year===2027?(budgetInitial[i]?.planned||0):0,actual:0,saving:0,savingReason:'',completed:false,demands:[]}));}
-for(let y=2026;y<=2035;y++){if(!Array.isArray(budgetAll[y]))budgetAll[y]=budgetMakeYear(y);else budgetAll[y]=budgetAll[y].map(x=>({...x,actual:Number(x.actual)||0,saving:Number(x.saving)||0,savingReason:x.savingReason||'',completed:!!x.completed,demands:x.demands||[]}));}
-if(!budgetAll[2027].some(x=>x.demands?.length)){
-  budgetOfficialDemands.forEach(d=>{const m=budgetAll[2027][d.month];m.demands.push({...d});});
-}
-let budgetYear=Number(document.getElementById('budgetYear')?.value||2027),budgetData=budgetAll[budgetYear];
-let budgetMonthFilter='all';
-const brl=n=>(Number(n)||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL',maximumFractionDigits:2});
-function budgetSave(){budgetAll[budgetYear]=budgetData;localStorage.setItem(budgetStoreKey,JSON.stringify(budgetAll));}
-function budgetChangeYear(){budgetSave();budgetYear=Number(document.getElementById('budgetYear').value);budgetData=budgetAll[budgetYear]||(budgetAll[budgetYear]=budgetMakeYear(budgetYear));budgetRender();}
-function budgetChangeMonth(){budgetMonthFilter=document.getElementById('budgetMonthFilter').value;budgetRender();}
-function budgetRender(){
- const sum=k=>budgetData.reduce((a,x)=>a+(Number(x[k])||0),0);
- const allDemands=budgetData.flatMap((x,mi)=>(x.demands||[]).map(d=>({...d,monthIndex:mi,monthLabel:x.month})));
- const visibleDemands=allDemands.filter(d=>budgetMonthFilter==='all'||d.monthIndex===Number(budgetMonthFilter));
- const planned=sum('planned'),actual=budgetData.reduce((a,x)=>a+(x.completed?(Number(x.actual)||x.demands.reduce((s,d)=>s+(d.completed?(Number(d.actual)||Number(d.planned)||0):0),0)):Number(x.actual)||0),0),saving=sum('saving')+allDemands.reduce((a,d)=>a+(Number(d.saving)||0),0),balance=planned-actual,savingPct=planned?saving/planned*100:0,completed=allDemands.filter(d=>d.completed).length;
- const reasons=allDemands.filter(d=>Number(d.saving)>0&&d.savingReason.trim()).map(d=>`${d.monthLabel} — ${d.name}: ${d.savingReason.trim()}`);
- const cards=[['Orçamento anual',brl(planned),'#ffc400',`Base oficial ${budgetYear}`],['Realizado contabilizado',brl(actual),'#4ea1ff',`Demandas concluídas: ${completed}`],['Saving cadastrado',brl(saving),'#2e9e5b',savingPct.toLocaleString('pt-BR',{maximumFractionDigits:2})+'% do orçamento'],['Saving % do total',savingPct.toLocaleString('pt-BR',{maximumFractionDigits:2})+'%','#2e9e5b',`${brl(saving)} sobre ${brl(planned)}`],['Saldo orçamento',brl(balance),balance<0?'#e5484d':'#ffc400','Orçamento menos realizado'],['Demandas concluídas',`${completed} / ${allDemands.length}`,'#2e9e5b',`Ano ${budgetYear}`],['Justificativas de saving',String(reasons.length),'#2e9e5b',reasons.slice(0,1).join(' • ')||'Nenhuma cadastrada']];
- document.getElementById('budgetKpis').innerHTML=cards.map(c=>`<div class="cert-kpi" style="--c:${c[2]}"><small>${c[0]}</small><b style="font-size:22px">${c[1]}</b><span>${c[3]}</span></div>`).join('');
- document.getElementById('budgetChartTitle').innerHTML=`Orçamento × Realizado × Saving por mês — ${budgetYear} <span>R$</span>`;
- document.getElementById('budgetRows').innerHTML=budgetData.map((x,i)=>`<tr style="${x.completed?'background:#10271a':''}"><td><b>${x.month}</b></td><td>${brl(x.planned)}</td><td>${brl(x.completed?(Number(x.actual)||x.demands.reduce((s,d)=>s+(d.completed?(Number(d.actual)||Number(d.planned)||0):0),0)):Number(x.actual)||0)}</td><td>${brl(x.saving)}</td><td>${String(x.savingReason||'—').replace(/</g,'&lt;')}</td><td>${brl(x.planned-(Number(x.actual)||0))}</td><td>${x.planned?((Number(x.actual)||0)/x.planned*100).toLocaleString('pt-BR',{maximumFractionDigits:1})+'%':'—'}</td><td><button class="btn ghost" type="button" onclick="budgetSelectMonth(${i})">Ver demandas</button></td></tr>`).join('');
- document.getElementById('budgetDemandRows').innerHTML=visibleDemands.length?visibleDemands.map(d=>`<tr style="${d.completed?'background:#10271a':''}"><td><b>${String(d.name||'Demanda').replace(/</g,'&lt;')}</b><br><small>${String(d.category||'').replace(/</g,'&lt;')} · ${String(d.supplier||'').replace(/</g,'&lt;')}</small></td><td>${d.monthLabel}</td><td>${brl(d.planned)}</td><td><input aria-label="Realizado da demanda" type="number" min="0" step="0.01" value="${Number(d.actual)||0}" onchange="budgetDemandEdit(${d.monthIndex},'${d.id}','actual',this.value)" style="width:120px"></td><td><input aria-label="Saving da demanda" type="number" min="0" step="0.01" value="${Number(d.saving)||0}" onchange="budgetDemandEdit(${d.monthIndex},'${d.id}','saving',this.value)" style="width:120px"></td><td><input aria-label="Justificativa saving" value="${String(d.savingReason||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;')}" placeholder="Por que houve saving?" onchange="budgetDemandEdit(${d.monthIndex},'${d.id}','savingReason',this.value)" style="min-width:200px;width:100%"></td><td><button class="btn ${d.completed?'':'ghost'}" onclick="budgetToggleDemand(${d.monthIndex},'${d.id}')" style="${d.completed?'background:#2e9e5b;color:white':''}">${d.completed?'✓ Concluído':'Marcar concluído'}</button></td><td><button class="btn ghost" type="button" onclick="budgetDeleteDemand(${d.monthIndex},'${d.id}')">Excluir</button></td></tr>`).join(''):'<tr><td colspan="8">Nenhuma demanda neste filtro. Cadastre uma nova demanda acima.</td></tr>';
- budgetDrawChart();
-}
-function budgetSelectMonth(i){document.getElementById('budgetMonthFilter').value=String(i);budgetMonthFilter=String(i);budgetRender();document.getElementById('budgetDemandRows').scrollIntoView({behavior:'smooth',block:'start'});}
-function budgetToggleDemand(mi,id){const d=budgetData[mi].demands.find(x=>String(x.id)===String(id));if(!d)return;d.completed=!d.completed;if(d.completed&&!Number(d.actual))d.actual=Number(d.planned)||0;budgetSave();budgetRender();toast(d.completed?'Demanda concluída: valor considerado no gráfico e nos cards.':'Conclusão removida.');}
-function budgetSetDemandYear(){
- const selectedYear=Number(document.getElementById('newBudgetDemandYear').value);
- if(!budgetAll[selectedYear])budgetAll[selectedYear]=budgetMakeYear(selectedYear);
- document.getElementById('budgetYear').value=String(selectedYear);
- budgetSave();budgetYear=selectedYear;budgetData=budgetAll[budgetYear];budgetRender();
-}
-function budgetAddDemand(){
- const selectedYear=Number(document.getElementById('newBudgetDemandYear').value||budgetYear);
- if(!budgetAll[selectedYear])budgetAll[selectedYear]=budgetMakeYear(selectedYear);
- budgetYear=selectedYear;budgetData=budgetAll[budgetYear];
- document.getElementById('budgetYear').value=String(selectedYear);
- const name=document.getElementById('newBudgetDemandName').value.trim();
- const category=document.getElementById('newBudgetDemandCategory').value;
- const supplier=document.getElementById('newBudgetDemandSupplier').value.trim();
- const month=Number(document.getElementById('newBudgetDemandMonth').value);
- const planned=Math.max(0,Number(document.getElementById('newBudgetDemandPlanned').value)||0);
- if(!name){alert('Informe o nome da demanda.');document.getElementById('newBudgetDemandName').focus();return;}
- const id='manual-'+Date.now()+'-'+Math.random().toString(36).slice(2,7);
- budgetData[month].demands.push({id,category,name,supplier,month,planned,actual:0,saving:0,savingReason:'',completed:false,observations:'',manual:true});
- document.getElementById('newBudgetDemandName').value='';document.getElementById('newBudgetDemandSupplier').value='';document.getElementById('newBudgetDemandPlanned').value='';
- budgetMonthFilter=String(month);document.getElementById('budgetMonthFilter').value=budgetMonthFilter;budgetSave();budgetRender();toast('Demanda cadastrada.');
-}
-function budgetDeleteDemand(mi,id){
- const d=budgetData[mi]?.demands.find(x=>String(x.id)===String(id));if(!d)return;
- if(!confirm(`Excluir a demanda "${d.name}"? Esta ação não pode ser desfeita.`))return;
- budgetData[mi].demands=budgetData[mi].demands.filter(x=>String(x.id)!==String(id));budgetSave();budgetRender();toast('Demanda excluída.');
-}
+document.addEventListener("DOMContentLoaded",checkIRISAuth);
 function budgetDemandEdit(mi,id,k,v){const d=budgetData[mi].demands.find(x=>String(x.id)===String(id));if(!d)return;d[k]=k==='savingReason'?String(v):Math.max(0,Number(v)||0);budgetSave();budgetRender();}
 function budgetEdit(i,k,v){budgetData[i][k]=k==='savingReason'?String(v):Math.max(0,Number(v)||0);budgetSave();budgetRender();}
 function budgetDrawChart(){const canvas=document.getElementById('budgetChart');if(!canvas)return;const rect=canvas.getBoundingClientRect(),dpr=window.devicePixelRatio||1;canvas.width=Math.max(320,rect.width)*dpr;canvas.height=Math.max(280,rect.height)*dpr;const ctx=canvas.getContext('2d');ctx.setTransform(dpr,0,0,dpr,0,0);const W=canvas.width/dpr,H=canvas.height/dpr;ctx.fillStyle='#ffffff';ctx.fillRect(0,0,W,H);const pad={l:78,r:24,t:30,b:70},pw=W-pad.l-pad.r,ph=H-pad.t-pad.b;const vals=budgetData.map(x=>({planned:x.planned,actual:x.completed?(Number(x.actual)||x.demands.reduce((s,d)=>s+(d.completed?(Number(d.actual)||Number(d.planned)||0):0),0)):0,saving:Number(x.saving||0)+x.demands.reduce((s,d)=>s+(Number(d.saving)||0),0)}));const maxV=Math.max(1,...vals.flatMap(x=>[x.planned,x.actual,x.saving]))*1.15;ctx.font='11px system-ui';ctx.textAlign='right';ctx.textBaseline='middle';for(let i=0;i<=5;i++){let y=pad.t+ph*i/5;ctx.strokeStyle='#e3ebf2';ctx.beginPath();ctx.moveTo(pad.l,y);ctx.lineTo(W-pad.r,y);ctx.stroke();ctx.fillStyle='#526a7b';ctx.fillText((maxV*(1-i/5)).toLocaleString('pt-BR',{notation:'compact',maximumFractionDigits:1}),pad.l-10,y);}[['planned','#f39a20'],['actual','#087fbd'],['saving','#13a66b']].forEach(([key,color])=>{ctx.strokeStyle=color;ctx.fillStyle=color;ctx.lineWidth=2.5;ctx.beginPath();vals.forEach((x,i)=>{let px=pad.l+i*pw/11,py=pad.t+ph-(Number(x[key])||0)/maxV*ph;if(i===0)ctx.moveTo(px,py);else ctx.lineTo(px,py);});ctx.stroke();vals.forEach((x,i)=>{let px=pad.l+i*pw/11,py=pad.t+ph-(Number(x[key])||0)/maxV*ph;ctx.beginPath();ctx.arc(px,py,3.5,0,Math.PI*2);ctx.fill();});});ctx.fillStyle='#526a7b';ctx.textAlign='center';ctx.textBaseline='top';ctx.font='11px system-ui';budgetData.forEach((x,i)=>{let px=pad.l+i*pw/11;ctx.fillText(x.month.split('/')[0]+(x.demands.some(d=>d.completed)?' ✓':''),px,H-pad.b+14);});}
 function budgetResetActual(){if(!confirm(`Limpar realizados, savings e conclusões de ${budgetYear}?`))return;budgetData=budgetData.map(x=>({...x,actual:0,saving:0,savingReason:'',completed:false,demands:x.demands.map(d=>({...d,actual:0,saving:0,savingReason:'',completed:false}))}));budgetSave();budgetRender();}
 function budgetExport(){if(!window.XLSX){alert('Biblioteca Excel não carregada.');return;}const rows=[['Ano','Mês','Categoria','Demanda','Fornecedor','Orçamento (R$)','Realizado (R$)','Saving (R$)','Justificativa','Status'],...budgetData.flatMap(x=>x.demands.map(d=>[budgetYear,x.month,d.category,d.name,d.supplier,d.planned,d.actual||0,d.saving||0,d.savingReason||'',d.completed?'Concluído':'Pendente']))];const book=XLSX.utils.book_new(),sheet=XLSX.utils.aoa_to_sheet(rows);XLSX.utils.book_append_sheet(book,sheet,`BUDGET ${budgetYear}`);XLSX.writeFile(book,`BUDGET_SHE_CRITICO_${budgetYear}.xlsx`);}
 window.addEventListener('resize',()=>{if(!document.getElementById('budget').hidden)budgetDrawChart();});
+</script>
+
+
+<script type="module">
+import { initializeApp, getApps } from 'https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js';
+import { getAuth, signInWithEmailAndPassword, signOut } from 'https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js';
+import { getFirestore, collection, doc, getDocs, onSnapshot, writeBatch } from 'https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js';
+import { getStorage, ref, uploadBytes, getDownloadURL } from 'https://www.gstatic.com/firebasejs/10.12.5/firebase-storage.js';
+const DEFAULT_CONFIG={apiKey:'AIzaSyDrEIOl0jg-Tzh8XFrdAfPrAa5xWJfKpGM',authDomain:'gest-ea7ff.firebaseapp.com',projectId:'gest-ea7ff',storageBucket:'gest-ea7ff.firebasestorage.app',messagingSenderId:'20233378878',appId:'1:20233378878:web:3fb74fcc627c5f03af056f'};
+const MASTER_EMAIL='she.master@dsm-tortuga.com';
+const EQUIP_COLLECTION='equipamentos';
+let app,auth,db,storage,unsubscribe=null,remoteIds=new Set(),lastSynced=new Map(),saveQueue=Promise.resolve(),connected=false,applyingRemote=false;
+const statusEl=()=>document.getElementById('fbConnectionStatus');
+function setStatus(msg,ok=false){const el=statusEl();if(el){el.textContent=(ok?'● ':'● ')+msg;el.style.color=ok?'#22a06b':'var(--warn)'}const b=document.getElementById('sync');if(b){b.textContent=ok?'● Firebase: conectado':'● Firebase: '+msg;b.style.color=ok?'#22a06b':'#f59e0b'}}
+function getConfig(){try{const saved=JSON.parse(localStorage.getItem('fbcfg')||'null');return saved&&saved.projectId==='gest-ea7ff'?saved:DEFAULT_CONFIG}catch{return DEFAULT_CONFIG}}
+const APP_NAME='SHECriticoGestaoSHE';
+function init(config=getConfig()){if(!app)app=getApps().find(a=>a.name===APP_NAME)||initializeApp(config,APP_NAME);auth=getAuth(app);db=getFirestore(app);storage=getStorage(app);return{auth,db,storage}}
+function cleanRecord(x){const v=JSON.parse(JSON.stringify(x));delete v.__docId;return v}
+async function writeRecords(records){
+ const next=new Map(records.map(x=>[String(x.id),cleanRecord(x)]));
+ const ops=[];
+ for(const [id,obj] of next){if(JSON.stringify(lastSynced.get(id))!==JSON.stringify(obj))ops.push({type:'set',id,obj});}
+ for(const id of remoteIds){if(!next.has(id))ops.push({type:'delete',id});}
+ for(let i=0;i<ops.length;i+=450){const batch=writeBatch(db);for(const op of ops.slice(i,i+450)){const r=doc(db,EQUIP_COLLECTION,op.id);if(op.type==='set')batch.set(r,op.obj);else batch.delete(r);}await batch.commit();}
+ remoteIds=new Set(next.keys());lastSynced=next;
+}
+async function syncInitial(){
+ const local=Array.isArray(window.data)?window.data:[];
+ const snap=await getDocs(collection(db,EQUIP_COLLECTION));
+ const cloud=snap.docs.map(d=>({...d.data(),id:d.id}));
+ remoteIds=new Set(snap.docs.map(d=>d.id));lastSynced=new Map(cloud.map(x=>[String(x.id),cleanRecord(x)]));
+ let merged;
+ if(!cloud.length){merged=local.map(cleanRecord);await writeRecords(merged);}
+ else {const map=new Map(cloud.map(x=>[String(x.id),x]));for(const x of local){if(!map.has(String(x.id)))map.set(String(x.id),cleanRecord(x));}merged=[...map.values()];if(merged.length!==cloud.length)await writeRecords(merged);}
+ applyingRemote=true;window.data=merged;localStorage.setItem('sheq_data_v4',JSON.stringify(merged));if(window.render)window.render();applyingRemote=false;
+ if(unsubscribe)unsubscribe();
+ unsubscribe=onSnapshot(collection(db,EQUIP_COLLECTION),(ss)=>{
+   const rows=ss.docs.map(d=>({...d.data(),id:d.id}));remoteIds=new Set(ss.docs.map(d=>d.id));lastSynced=new Map(rows.map(x=>[String(x.id),cleanRecord(x)]));
+   if(!applyingRemote){applyingRemote=true;window.data=rows;localStorage.setItem('sheq_data_v4',JSON.stringify(rows));if(window.render)window.render();applyingRemote=false;}
+   setStatus(`${rows.length} equipamentos sincronizados`,true);
+ },err=>{console.error(err);setStatus('erro ao receber atualizações: '+err.message,false)});
+ connected=true;setStatus(`${merged.length} equipamentos sincronizados`,true);
+ await migrateCertificatePdfs();
+}
+async function migrateCertificatePdfs(){
+ if(!window.data)return;let changed=false;
+ for(const e of window.data){for(const c of (e.certs||[])){if(c.fileId&&!c.storagePath){try{const blob=await window.idbGet(c.fileId);if(blob){const meta=await window.sheFirebaseUploadCertificate(e.id,c.fileId,blob);Object.assign(c,meta);changed=true;}}catch(err){console.warn('Migração de PDF pendente',err)}}}}
+ if(changed&&window.persistData)window.persistData();
+}
+window.sheFirebaseSave=(records)=>{
+ if(!connected||applyingRemote||!auth?.currentUser)return;
+ const copy=JSON.parse(JSON.stringify(records));
+ saveQueue=saveQueue.then(()=>writeRecords(copy)).catch(err=>{console.error(err);setStatus('falha ao salvar: '+err.message,false)});
+};
+window.sheFirebaseUploadCertificate=async(equipmentId,fileId,file)=>{
+ if(!connected||!storage||!auth?.currentUser)throw new Error('Faça login no Firebase antes de enviar PDFs.');
+ const path=`she-critico-certificados/${equipmentId}/${fileId}-${(file.name||'certificado.pdf').replace(/[^a-zA-Z0-9._-]/g,'_')}`;
+ const target=ref(storage,path);await uploadBytes(target,file,{contentType:file.type||'application/pdf'});const fileUrl=await getDownloadURL(target);return{storagePath:path,fileUrl};
+};
+window.sheFirebaseLogin=async(password)=>{
+ init();
+ const saved=getConfig();
+ if(JSON.stringify(saved)!==JSON.stringify(DEFAULT_CONFIG)){app=null;init(saved)}
+ const cred=await signInWithEmailAndPassword(auth,MASTER_EMAIL,password);
+ await syncInitial();
+ return cred.user;
+};
+window.sheFirebaseLogout=async()=>{try{if(unsubscribe)unsubscribe();unsubscribe=null;connected=false;if(auth?.currentUser)await signOut(auth);setStatus('desconectado',false)}catch(e){console.warn(e)}};
+window.sheFirebaseErrorMessage=(err)=>{
+ const code=err?.code||'';
+ if(code.includes('auth/invalid-credential')||code.includes('auth/wrong-password')||code.includes('auth/user-not-found'))return'Conta mestre não encontrada ou senha incorreta. Crie no Firebase Auth o usuário '+MASTER_EMAIL+'.';
+ if(code.includes('auth/operation-not-allowed'))return'Ative o método E-mail/senha em Firebase → Authentication → Sign-in method.';
+ if(code.includes('permission-denied'))return'Firebase conectado, mas as regras do Firestore/Storage bloquearam o acesso. Publique as regras que permitem acesso somente a usuários autenticados.';
+ if(code.includes('unavailable')||code.includes('network'))return'Falha de rede. Confira sua conexão e tente novamente.';
+ return'Falha Firebase: '+(err?.message||code||'erro desconhecido');
+};
+window.sheFirebaseConnectTest=async(config)=>{try{if(config.projectId!=='gest-ea7ff')throw new Error('Use a configuração do projeto GestaoSHE (gest-ea7ff).');localStorage.setItem('fbcfg',JSON.stringify(config));app=null;init(config);setStatus('projeto GestaoSHE configurado. Faça login para validar a sincronização.',true);toast('Projeto GestaoSHE configurado. Entre com a senha mestre para testar.')}catch(e){setStatus('erro na configuração: '+e.message,false)}};
+try{const cfg=getConfig();document.getElementById('cfg').value=JSON.stringify(DEFAULT_CONFIG,null,2);localStorage.setItem('fbcfg',JSON.stringify(DEFAULT_CONFIG));setStatus('projeto GestaoSHE configurado. Entre com a conta mestre.',true)}catch(e){console.warn(e)}
 </script>
 
 </body>
