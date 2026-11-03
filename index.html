@@ -739,9 +739,12 @@ window.setEquipmentData=(rows)=>{if(!Array.isArray(rows))return;data=rows;data.f
    Em HTML estático, a senha pode ser visualizada no código-fonte; para segurança real,
    validar permissões no Firebase/servidor antes de publicar para vários usuários. */
 function requireEquipmentPassword(action){
-  const pass=prompt('Confirme a senha para '+action+' equipamento:');
-  if(pass===null)return false;
-  if(pass!==IRIS_PASSWORD){toast('Senha incorreta. Operação cancelada.');return false;}
+  // A senha mestre já foi validada no login Firebase. IRIS_PASSWORD não existe
+  // neste arquivo; compará-la causava ReferenceError e impedia qualquer exclusão.
+  if(sessionStorage.getItem('iris_auth')!=='1'){
+    toast('Sua sessão não está autenticada. Saia e entre novamente.');
+    return false;
+  }
   return true;
 }
 function addEqHistory(e,action,detail){
@@ -1266,7 +1269,9 @@ const MASTER_EMAIL='she.master@dsm-tortuga.com';
 const EQUIP_COLLECTION='equipamentos';
 const SITE_STATE_COLLECTION='site_state';
 const SITE_EXCLUDED_KEYS=new Set(['fbcfg','iris_remember_user','sheq_data_v4','sheq_equipment_movements_v1','sheq_iris_local_updated_v1']);
-let app,auth,db,storage,unsubscribe=null,historyUnsubscribe=null,siteStateUnsubscribe=null,remoteIds=new Set(),lastSynced=new Map(),saveQueue=Promise.resolve(),siteSaveQueue=Promise.resolve(),connected=false,applyingRemote=false,applyingSiteRemote=false,storageHooksInstalled=false;
+let app,auth,db,storage,unsubscribe=null,historyUnsubscribe=null,siteStateUnsubscribe=null,remoteIds=new Set(),lastSynced=new Map(),saveQueue=Promise.resolve(),siteSaveQueue=Promise.resolve(),connected=false,applyingRemote=false,applyingSiteRemote=false,storageHooksInstalled=false,pendingCloudWrites=0;
+function trackCloudWrite(promise){pendingCloudWrites++;return Promise.resolve(promise).finally(()=>{pendingCloudWrites=Math.max(0,pendingCloudWrites-1);});}
+window.addEventListener('beforeunload',event=>{if(pendingCloudWrites>0){event.preventDefault();event.returnValue='Existem dados sendo salvos no Firebase. Aguarde a confirmação antes de atualizar.';return event.returnValue;}});
 function siteDocId(key){return encodeURIComponent(String(key)).replace(/\./g,'%2E')}
 function siteStatusError(err){console.error('Sincronização geral',err);setStatus('falha ao salvar dados do site: '+(err?.message||err),false)}
 async function saveSiteStateKey(key,value,deleted=false){
@@ -1277,13 +1282,13 @@ async function saveSiteStateKey(key,value,deleted=false){
  if(value.length>850000)throw new Error('O campo '+key+' excede o limite seguro do Firestore. Anexos devem ser enviados ao Storage.');
  await setDoc(refDoc,{key,value,deleted:false,updatedAt:Date.now()},{merge:true});return true;
 }
-window.sheFirebaseSaveSiteState=(key,value)=>{siteSaveQueue=siteSaveQueue.then(()=>saveSiteStateKey(key,value,false));return siteSaveQueue;};
+window.sheFirebaseSaveSiteState=(key,value)=>{siteSaveQueue=trackCloudWrite(siteSaveQueue.then(()=>saveSiteStateKey(key,value,false)));return siteSaveQueue;};
 function installSiteStorageHooks(){
  if(storageHooksInstalled)return;storageHooksInstalled=true;
  const originalSet=Storage.prototype.setItem,originalRemove=Storage.prototype.removeItem,originalClear=Storage.prototype.clear;
- Storage.prototype.setItem=function(key,value){originalSet.call(this,key,value);if(this===window.localStorage&&!applyingSiteRemote&&!SITE_EXCLUDED_KEYS.has(String(key))){const k=String(key),v=String(value);siteSaveQueue=siteSaveQueue.then(()=>saveSiteStateKey(k,v)).then(ok=>{if(ok)setStatus('dados gerais salvos no Firebase',true);return ok}).catch(siteStatusError)}};
- Storage.prototype.removeItem=function(key){originalRemove.call(this,key);if(this===window.localStorage&&!applyingSiteRemote&&!SITE_EXCLUDED_KEYS.has(String(key))){const k=String(key);siteSaveQueue=siteSaveQueue.then(()=>saveSiteStateKey(k,'',true)).catch(siteStatusError)}};
- Storage.prototype.clear=function(){if(this===window.localStorage){const keys=[];for(let i=0;i<this.length;i++){const k=this.key(i);if(k&&!SITE_EXCLUDED_KEYS.has(k))keys.push(k)}originalClear.call(this);keys.forEach(k=>{siteSaveQueue=siteSaveQueue.then(()=>saveSiteStateKey(k,'',true)).catch(siteStatusError)})}else originalClear.call(this)};
+ Storage.prototype.setItem=function(key,value){originalSet.call(this,key,value);if(this===window.localStorage&&!applyingSiteRemote&&!SITE_EXCLUDED_KEYS.has(String(key))){const k=String(key),v=String(value);siteSaveQueue=trackCloudWrite(siteSaveQueue.then(()=>saveSiteStateKey(k,v)).then(ok=>{if(ok)setStatus('dados gerais salvos no Firebase',true);return ok}).catch(err=>{siteStatusError(err);return false;}))}};
+ Storage.prototype.removeItem=function(key){originalRemove.call(this,key);if(this===window.localStorage&&!applyingSiteRemote&&!SITE_EXCLUDED_KEYS.has(String(key))){const k=String(key);siteSaveQueue=trackCloudWrite(siteSaveQueue.then(()=>saveSiteStateKey(k,'',true)).catch(err=>{siteStatusError(err);return false;}))}};
+ Storage.prototype.clear=function(){if(this===window.localStorage){const keys=[];for(let i=0;i<this.length;i++){const k=this.key(i);if(k&&!SITE_EXCLUDED_KEYS.has(k))keys.push(k)}originalClear.call(this);keys.forEach(k=>{siteSaveQueue=trackCloudWrite(siteSaveQueue.then(()=>saveSiteStateKey(k,'',true)).catch(err=>{siteStatusError(err);return false;}))})}else originalClear.call(this)};
 }
 async function syncAllSiteState(){
  installSiteStorageHooks();
@@ -1364,7 +1369,7 @@ async function migrateCertificatePdfs(){
 window.sheFirebaseSave=(records)=>{
  if(!connected||applyingRemote||!auth?.currentUser){setStatus('alteração salva somente neste navegador — Firebase não conectado',false);return Promise.resolve(false);}
  const copy=JSON.parse(JSON.stringify(records));
- saveQueue=saveQueue.then(()=>writeRecords(copy)).then(()=>{setStatus('alterações salvas no Firebase',true);return true;}).catch(err=>{console.error(err);setStatus('falha ao salvar: '+err.message,false);return false;});
+ saveQueue=trackCloudWrite(saveQueue.then(()=>writeRecords(copy)).then(()=>{setStatus('alterações salvas no Firebase',true);return true;}).catch(err=>{console.error(err);setStatus('falha ao salvar: '+err.message,false);return false;}));
  return saveQueue;
 };
 window.sheFirebaseSaveMovementHistory=async(records)=>{if(!connected||!db||!auth?.currentUser)return;try{for(const item of records){const clean=JSON.parse(JSON.stringify(item));await setDoc(doc(db,'historico_equipamentos',String(item.id)),clean,{merge:true});}setStatus('histórico salvo no Firebase',true);return true;}catch(err){console.error('Histórico Firebase',err);setStatus('falha ao salvar histórico: '+err.message,false);throw err}};
