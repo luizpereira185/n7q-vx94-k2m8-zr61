@@ -993,7 +993,9 @@ const blankIris=()=>irisMonths.map(()=>({p:'',nm:'',na:'',r:'',a:''}));
 const irisStore={};
 irisYears.forEach(y=>irisStore[y]={SHE:blankIris(),QUA:blankIris(),SOB:blankIris()});
 try{const savedIris=JSON.parse(localStorage.getItem('sheq_iris_data_v1')||'null');if(savedIris&&typeof savedIris==='object')irisYears.forEach(y=>{if(savedIris[y])irisStore[y]=savedIris[y]})}catch(e){console.warn('IRIS local indisponível',e)}
-function persistIris(){try{localStorage.setItem('sheq_iris_data_v1',JSON.stringify(irisStore))}catch(e){console.error('Falha ao guardar IRIS',e);toast('Não foi possível guardar o Report IRIS neste navegador.')}}
+function persistIris(){try{const raw=JSON.stringify(irisStore);localStorage.setItem('sheq_iris_data_v1',raw);localStorage.setItem('sheq_iris_local_updated_v1',String(Date.now()));if(typeof window.sheFirebaseSaveSiteState==='function'){window.sheFirebaseSaveSiteState('sheq_iris_data_v1',raw).then(ok=>{const st=document.getElementById('irisStatus');if(st)st.textContent=ok?'Report IRIS salvo na nuvem.':'Report IRIS salvo neste aparelho; aguardando conexão Firebase.';}).catch(e=>{console.error('Falha ao sincronizar IRIS',e);const st=document.getElementById('irisStatus');if(st)st.textContent='Erro ao salvar IRIS na nuvem: '+(e.message||e);});}}catch(e){console.error('Falha ao guardar IRIS',e);toast('Não foi possível guardar o Report IRIS neste navegador.')}}
+// Aplica no estado em memória as alterações recebidas de outro computador/celular.
+window.sheApplyRemoteIris=function(raw){try{const incoming=typeof raw==='string'?JSON.parse(raw):raw;if(!incoming||typeof incoming!=='object')return;irisYears.forEach(y=>{const yr=incoming[y];if(!yr)return;['SHE','QUA','SOB'].forEach(cat=>{if(Array.isArray(yr[cat]))irisStore[y][cat]=yr[cat].map((r,i)=>({...blankIris()[i],...(r||{})}));});});irisData=irisStore[irisYear]||irisStore[2026];if(!document.getElementById('iris').hidden)renderIRIS();const st=document.getElementById('irisStatus');if(st)st.textContent='Report IRIS atualizado pela nuvem.';}catch(e){console.error('Falha ao aplicar IRIS remoto',e);}};
 let irisYear=2026;
 let irisData=irisStore[irisYear];
 function initIrisYears(){
@@ -1263,7 +1265,7 @@ const DEFAULT_CONFIG={apiKey:'AIzaSyDrEIOl0jg-Tzh8XFrdAfPrAa5xWJfKpGM',authDomai
 const MASTER_EMAIL='she.master@dsm-tortuga.com';
 const EQUIP_COLLECTION='equipamentos';
 const SITE_STATE_COLLECTION='site_state';
-const SITE_EXCLUDED_KEYS=new Set(['fbcfg','iris_remember_user','sheq_data_v4','sheq_equipment_movements_v1']);
+const SITE_EXCLUDED_KEYS=new Set(['fbcfg','iris_remember_user','sheq_data_v4','sheq_equipment_movements_v1','sheq_iris_local_updated_v1']);
 let app,auth,db,storage,unsubscribe=null,historyUnsubscribe=null,siteStateUnsubscribe=null,remoteIds=new Set(),lastSynced=new Map(),saveQueue=Promise.resolve(),siteSaveQueue=Promise.resolve(),connected=false,applyingRemote=false,applyingSiteRemote=false,storageHooksInstalled=false;
 function siteDocId(key){return encodeURIComponent(String(key)).replace(/\./g,'%2E')}
 function siteStatusError(err){console.error('Sincronização geral',err);setStatus('falha ao salvar dados do site: '+(err?.message||err),false)}
@@ -1275,6 +1277,7 @@ async function saveSiteStateKey(key,value,deleted=false){
  if(value.length>850000)throw new Error('O campo '+key+' excede o limite seguro do Firestore. Anexos devem ser enviados ao Storage.');
  await setDoc(refDoc,{key,value,deleted:false,updatedAt:Date.now()},{merge:true});return true;
 }
+window.sheFirebaseSaveSiteState=(key,value)=>{siteSaveQueue=siteSaveQueue.then(()=>saveSiteStateKey(key,value,false));return siteSaveQueue;};
 function installSiteStorageHooks(){
  if(storageHooksInstalled)return;storageHooksInstalled=true;
  const originalSet=Storage.prototype.setItem,originalRemove=Storage.prototype.removeItem,originalClear=Storage.prototype.clear;
@@ -1290,13 +1293,16 @@ async function syncAllSiteState(){
  // Dados já existentes na nuvem são recuperados; dados locais ainda não enviados são publicados.
  applyingSiteRemote=true;
  try{
-  for(const [key,item] of cloud){if(item.deleted){localStorage.removeItem(key)}else if(typeof item.value==='string'){localStorage.setItem(key,item.value)}}
+  for(const [key,item] of cloud){if(item.deleted){localStorage.removeItem(key);if(key==='sheq_iris_data_v1'&&window.sheApplyRemoteIris)window.sheApplyRemoteIris('{}')}else if(typeof item.value==='string'){
+    if(key==='sheq_iris_data_v1'){const localRaw=localStorage.getItem(key);const localStamp=Number(localStorage.getItem('sheq_iris_local_updated_v1')||0);const cloudStamp=Number(item.updatedAt||0);if(localRaw&&localStamp>cloudStamp){await saveSiteStateKey(key,localRaw,false);window.sheApplyRemoteIris?.(localRaw);}else{localStorage.setItem(key,item.value);window.sheApplyRemoteIris?.(item.value);localStorage.setItem('sheq_iris_local_updated_v1',String(cloudStamp));}}
+    else localStorage.setItem(key,item.value);
+  }}
  }finally{applyingSiteRemote=false}
  for(const key of localKeys){if(!cloud.has(key)){const value=localStorage.getItem(key);if(value!==null)await saveSiteStateKey(key,value)}}
  if(siteStateUnsubscribe)siteStateUnsubscribe();
  siteStateUnsubscribe=onSnapshot(collection(db,SITE_STATE_COLLECTION),(ss)=>{
   applyingSiteRemote=true;
-  try{ss.docs.forEach(d=>{const x=d.data(),key=x.key||decodeURIComponent(d.id);if(SITE_EXCLUDED_KEYS.has(key))return;if(x.deleted)localStorage.removeItem(key);else if(typeof x.value==='string'&&localStorage.getItem(key)!==x.value)localStorage.setItem(key,x.value)})}
+  try{ss.docChanges().forEach(change=>{const d=change.doc,x=d.data(),key=x.key||decodeURIComponent(d.id);if(SITE_EXCLUDED_KEYS.has(key))return;if(x.deleted){localStorage.removeItem(key);if(key==='sheq_iris_data_v1'&&window.sheApplyRemoteIris)window.sheApplyRemoteIris('{}');}else if(typeof x.value==='string'){if(localStorage.getItem(key)!==x.value)localStorage.setItem(key,x.value);if(key==='sheq_iris_data_v1'){localStorage.setItem('sheq_iris_local_updated_v1',String(x.updatedAt||Date.now()));if(window.sheApplyRemoteIris)window.sheApplyRemoteIris(x.value);}}})}
   finally{applyingSiteRemote=false}
   setStatus('dados gerais do site sincronizados',true);
  },siteStatusError);
