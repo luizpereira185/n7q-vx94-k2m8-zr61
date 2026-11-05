@@ -903,6 +903,9 @@ function closeCertM(){document.getElementById('certM').classList.remove('open');
 function calcCertVal(){const cal=document.getElementById('cf_cal').value,months=Math.max(1,parseInt(document.getElementById('cf_months').value||12));if(!cal)return;const d=new Date(cal+'T00:00:00');d.setMonth(d.getMonth()+months);document.getElementById('cf_val').value=iso(d)}
 document.getElementById('cf_cal').addEventListener('change',calcCertVal);document.getElementById('cf_months').addEventListener('input',calcCertVal);document.getElementById('cf_eq').addEventListener('change',()=>{const e=data.find(x=>x.id===document.getElementById('cf_eq').value);if(e&&!document.getElementById('cf_forn').value)document.getElementById('cf_forn').value=e.forn||''});
 async function saveCert(){
+  try{await saveCertInner()}catch(err){console.error(err);toast('Erro ao salvar certificado: '+(err.message||err))}
+}
+async function saveCertInner(){
   const selectedId=document.getElementById('cf_eq').value,index=certEditing.index,e=data.find(x=>x.id===selectedId);if(!e)return toast('Selecione um equipamento');
   const oldEq=certEditing.eqId?data.find(x=>x.id===certEditing.eqId):null;const old=index!==null&&oldEq?.certs?.[index]?oldEq.certs[index]:null;const newFiles=[...document.getElementById('cf_file').files];const file=newFiles[0];
   const cal=document.getElementById('cf_cal').value,meses=Math.max(1,parseInt(document.getElementById('cf_months').value||12));if(!cal)return toast('Informe a data de calibração');calcCertVal();const val=document.getElementById('cf_val').value;if(!val)return toast('Não foi possível calcular o vencimento');
@@ -1284,9 +1287,11 @@ let budgetYear=Number((document.getElementById('budgetYear')||{}).value)||2027;
 let budgetMonth='all';
 let budgetData=[];
 function budgetBlank(y){return BUDGET_MONTHS.map(m=>({month:m.slice(0,3)+'/'+y,planned:0,actual:0,saving:0,savingReason:'',completed:false,demands:[]}));}
+const BUDGET_SEED_2027=[[8, "SHE", "WI INSPEÇÕES", "WI INSPEÇÕES", 13000.0, 1, ""], [9, "SHE", "WI INSPEÇÕES", "WI INSPEÇÕES", 50000.0, 1, ""], [11, "SHE", "WI INSPEÇÕES", "WI INSPEÇÕES", 800000.0, 1, ""], [0, "SHE", "Kit de Reparo equivalente a 5 valvulas psv + calibração\nReparo de Forninho Presys + compra de equipamentos para bancada (projeto interno)", "GESTÃO DE CALIBRAÇÃO", 16000.0, 2, ""], [1, "SHE", "Kit de Reparo equivalente a 5 valvulas psv + calibração\nReparo de Forninho Presys + compra de equipamentos para bancada (projeto interno)", "GESTÃO DE CALIBRAÇÃO", 13000.0, 2, ""], [2, "SHE", "Kit de Reparo equivalente a 5 valvulas psv + calibração\nReparo de Forninho Presys + compra de equipamentos para bancada (projeto interno)", "GESTÃO DE CALIBRAÇÃO", 13000.0, 2, ""], [4, "SHE", "Kit de Reparo equivalente a 5 valvulas psv + calibração\nReparo de Forninho Presys + compra de equipamentos para bancada (projeto interno)", "GESTÃO DE CALIBRAÇÃO", 16000.0, 2, ""], [5, "SHE", "Kit de Reparo equivalente a 5 valvulas psv + calibração\nReparo de Forninho Presys + compra de equipamentos para bancada (projeto interno)", "GESTÃO DE CALIBRAÇÃO", 13000.0, 2, ""], [6, "SHE", "Kit de Reparo equivalente a 5 valvulas psv + calibração\nReparo de Forninho Presys + compra de equipamentos para bancada (projeto interno)", "GESTÃO DE CALIBRAÇÃO", 13000.0, 2, ""], [8, "SHE", "Kit de Reparo equivalente a 5 valvulas psv + calibração\nReparo de Forninho Presys + compra de equipamentos para bancada (projeto interno)", "GESTÃO DE CALIBRAÇÃO", 16000.0, 2, ""], [9, "SHE", "Kit de Reparo equivalente a 5 valvulas psv + calibração\nReparo de Forninho Presys + compra de equipamentos para bancada (projeto interno)", "GESTÃO DE CALIBRAÇÃO", 13000.0, 2, ""], [10, "SHE", "Kit de Reparo equivalente a 5 valvulas psv + calibração\nReparo de Forninho Presys + compra de equipamentos para bancada (projeto interno)", "GESTÃO DE CALIBRAÇÃO", 13000.0, 2, ""], [0, "SHE", "KONUS", "KONUS", 70000.0, 3, ""], [0, "SHE", "KONUS CORREÇÕES", "KONUS CORREÇÕES", 9200.0, 4, ""], [0, "SHE", "ENDRESS HAUSER", "ENDRESS HAUSER", 6085.89, 5, ""], [1, "SHE", "ENDRESS HAUSER", "ENDRESS HAUSER", 6085.89, 5, ""], [2, "SHE", "ENDRESS HAUSER", "ENDRESS HAUSER", 6085.89, 5, ""], [3, "SHE", "ENDRESS HAUSER", "ENDRESS HAUSER", 6085.89, 5, ""], [4, "SHE", "ENDRESS HAUSER", "ENDRESS HAUSER", 6085.89, 5, ""], [5, "SHE", "ENDRESS HAUSER", "ENDRESS HAUSER", 6085.89, 5, ""], [6, "SHE", "ENDRESS HAUSER", "ENDRESS HAUSER", 6085.89, 5, ""], [7, "SHE", "ENDRESS HAUSER", "ENDRESS HAUSER", 6085.89, 5, ""], [8, "SHE", "ENDRESS HAUSER", "ENDRESS HAUSER", 6085.89, 5, ""], [9, "SHE", "ENDRESS HAUSER", "ENDRESS HAUSER", 6085.89, 5, ""], [10, "SHE", "ENDRESS HAUSER", "ENDRESS HAUSER", 6085.89, 5, ""], [11, "SHE", "ENDRESS HAUSER", "ENDRESS HAUSER", 6085.89, 5, ""], [7, "SHE", "HOERBIGER", "HOERBIGER", 22000.0, 6, ""], [11, "SHE", "HOERBIGER", "HOERBIGER", 155000.0, 6, ""], [2, "SHE", "DESMAG", "DESMAG", 19500.0, 7, ""], [11, "SHE", "WEISHAUPT", "WEISHAUPT", 12600.0, 8, ""], [11, "ERSA", "FILTRO MANGA EXTERNO APOLLO", "FILTRO MANGA EXTERNO APOLLO", 144161.66, 9, ""], [11, "ERSA", "FILTRO MANGA INTERNO APOLLO", "FILTRO MANGA INTERNO APOLLO", 25000.0, 10, ""], [2, "ERSA", "FILTRO MANGA MOEGAS DCP", "FILTRO MANGA MOEGAS DCP", 58500.0, 11, ""], [5, "ERSA", "FILTRO MANGA MOEGAS DCP", "FILTRO MANGA MOEGAS DCP", 58500.0, 11, ""], [8, "ERSA", "FILTRO MANGA MOEGAS DCP", "FILTRO MANGA MOEGAS DCP", 58500.0, 11, ""], [11, "ERSA", "FILTRO MANGA MOEGAS DCP", "FILTRO MANGA MOEGAS DCP", 58500.0, 11, ""], [2, "SHE", "FOCUS", "FOCUS", 73000.0, 12, ""], [1, "SHE", "GEABS", "GEABS", 5250.0, 13, ""], [4, "SHE", "GEABS", "GEABS", 9450.0, 13, ""], [6, "SHE", "GEABS", "GEABS", 6300.0, 13, ""], [11, "SHE", "GEABS", "GEABS", 70000.0, 13, ""], [9, "QUA", "MAGTEK", "MAGTEK", 12600.0, 14, "Serviço de Medições em Placas Magneticas considerando mão de obra, Certificação técnica"], [10, "OUTROS", "NEDERMAN", "NEDERMAN", 8000.0, 15, ""], [5, "SOB", "PPI", "PPI", 17000.0, 16, ""], [0, "SHE", "REVCAL", "REVCAL", 2500.0, 17, ""], [3, "SHE", "REVCAL", "REVCAL", 2200.0, 17, ""], [5, "SHE", "REVCAL", "REVCAL", 800.0, 17, ""], [6, "SHE", "REVCAL", "REVCAL", 3800.0, 17, ""], [7, "SHE", "REVCAL", "REVCAL", 6800.0, 17, ""], [9, "SHE", "REVCAL", "REVCAL", 2000.0, 17, ""], [11, "SHE", "REVCAL", "REVCAL", 1500.0, 17, ""], [11, "OUTROS", "TECHNOFAN", "TECHNOFAN", 8200.0, 18, ""], [0, "OUTROS", "TECNOSERVICE", "TECNOSERVICE", 20000.0, 19, ""], [7, "SHE", "YORGOS", "YORGOS", 7000.0, 20, ""], [0, "SHE", "YORGOS", "YORGOS", 5634.82, 21, ""], [1, "SHE", "YORGOS", "YORGOS", 5634.82, 21, ""], [2, "SHE", "YORGOS", "YORGOS", 5634.82, 21, ""], [3, "SHE", "YORGOS", "YORGOS", 5634.82, 21, ""], [4, "SHE", "YORGOS", "YORGOS", 5634.82, 21, ""], [5, "SHE", "YORGOS", "YORGOS", 5634.82, 21, ""], [6, "SHE", "YORGOS", "YORGOS", 5634.82, 21, ""], [7, "SHE", "YORGOS", "YORGOS", 5634.82, 21, ""], [8, "SHE", "YORGOS", "YORGOS", 6832.98, 21, ""], [9, "SHE", "YORGOS", "YORGOS", 6832.98, 21, ""], [10, "SHE", "YORGOS", "YORGOS", 6832.98, 21, ""], [11, "SHE", "YORGOS", "YORGOS", 6832.98, 21, ""], [0, "SHE", "YURI AGUA", "YURI AGUA", 6500.0, 22, "Override para Preventiva em Geradores de Emergencia"], [6, "SHE", "YURI AGUA", "YURI AGUA", 6500.0, 22, "Override para Preventiva em Geradores de Emergencia"], [0, "ERSA", "GERADOR DE EMERG.", "GERADOR DE EMERG.", 8820.0, 23, "Materiais Ersa para Preventiva Geradores de Emergencia"], [6, "ERSA", "GERADOR DE EMERG.", "GERADOR DE EMERG.", 8820.0, 23, "Materiais Ersa para Preventiva Geradores de Emergencia"], [0, "SOB", "CPFL", "CPFL", 13150.0, 24, ""], [1, "SOB", "CPFL", "CPFL", 66150.0, 24, ""], [2, "SOB", "CPFL", "CPFL", 13150.0, 24, ""], [3, "SOB", "CPFL", "CPFL", 13150.0, 24, ""], [4, "SOB", "CPFL", "CPFL", 13150.0, 24, ""], [5, "SOB", "CPFL", "CPFL", 13150.0, 24, ""], [6, "SOB", "CPFL", "CPFL", 13150.0, 24, ""], [7, "SOB", "CPFL", "CPFL", 13150.0, 24, ""], [8, "SOB", "CPFL", "CPFL", 13150.0, 24, ""], [9, "SOB", "CPFL", "CPFL", 13150.0, 24, ""], [10, "SOB", "CPFL", "CPFL", 13150.0, 24, ""], [11, "SOB", "CPFL", "CPFL", 13150.0, 24, ""], [0, "QUA", "ALFA", "ALFA", 14700.0, 25, ""], [1, "QUA", "ALFA", "ALFA", 14700.0, 25, ""], [2, "QUA", "ALFA", "ALFA", 14700.0, 25, ""], [3, "QUA", "ALFA", "ALFA", 14700.0, 25, ""], [4, "QUA", "ALFA", "ALFA", 14700.0, 25, ""], [5, "QUA", "ALFA", "ALFA", 14700.0, 25, ""], [6, "QUA", "ALFA", "ALFA", 14700.0, 25, ""], [7, "QUA", "ALFA", "ALFA", 14700.0, 25, ""], [8, "QUA", "ALFA", "ALFA", 14700.0, 25, ""], [9, "QUA", "ALFA", "ALFA", 14700.0, 25, ""], [10, "QUA", "ALFA", "ALFA", 14700.0, 25, ""], [11, "QUA", "ALFA", "ALFA", 14700.0, 25, ""], [0, "ERSA", "INDICADOR PESAG MICROP 0/4-20MA - 3060031046 (R$ 3.349,29 Un.)\nSUPORTE APOIO MANDRITEC MAND335 - 3061051361 (R$ 360,30 Un.)\nCELULA DE CARGA DIVERSAS  - (MÉDIA DE 2 TROCAS R$ 8.941,82)", "ALFA CORREÇÕES", 16730.86, 26, ""], [3, "ERSA", "INDICADOR PESAG MICROP 0/4-20MA - 3060031046 (R$ 3.349,29 Un.)\nSUPORTE APOIO MANDRITEC MAND335 - 3061051361 (R$ 360,30 Un.)\nCELULA DE CARGA DIVERSAS  - (MÉDIA DE 2 TROCAS R$ 8.941,82)", "ALFA CORREÇÕES", 16730.86, 26, ""], [6, "ERSA", "INDICADOR PESAG MICROP 0/4-20MA - 3060031046 (R$ 3.349,29 Un.)\nSUPORTE APOIO MANDRITEC MAND335 - 3061051361 (R$ 360,30 Un.)\nCELULA DE CARGA DIVERSAS  - (MÉDIA DE 2 TROCAS R$ 8.941,82)", "ALFA CORREÇÕES", 16730.86, 26, ""], [9, "ERSA", "INDICADOR PESAG MICROP 0/4-20MA - 3060031046 (R$ 3.349,29 Un.)\nSUPORTE APOIO MANDRITEC MAND335 - 3061051361 (R$ 360,30 Un.)\nCELULA DE CARGA DIVERSAS  - (MÉDIA DE 2 TROCAS R$ 8.941,82)", "ALFA CORREÇÕES", 16730.86, 26, ""], [9, "QUA", "COMTEC", "COMTEC", 23268.0, 27, ""], [9, "SHE", "RUD", "RUD", 17200.0, 28, ""], [6, "SOB", "ESD", "ESD", 6000.0, 30, ""], [1, "SOB", "PONTEC", "PONTEC", 35000.0, 31, ""], [3, "SOB", "PONTEC", "PONTEC", 35000.0, 31, ""], [5, "SOB", "PONTEC", "PONTEC", 35000.0, 31, ""], [7, "SOB", "PONTEC", "PONTEC", 35000.0, 31, ""], [9, "SOB", "PONTEC", "PONTEC", 35000.0, 31, ""], [11, "SOB", "PONTEC", "PONTEC", 35000.0, 31, ""], [0, "SHE", "KIDDE", "KIDDE", 10500.0, 32, ""], [3, "SHE", "KIDDE", "KIDDE", 10500.0, 32, ""], [6, "SHE", "KIDDE", "KIDDE", 10500.0, 32, ""], [9, "SHE", "KIDDE", "KIDDE", 10500.0, 32, ""], [4, "QUA", "SUNNYVALE", "SUNNYVALE", 9000.0, 33, ""], [0, "NLAG", "SIL(LUB + VIB)", "SIL(LUB + VIB)", 32000.0, 34, ""], [1, "NLAG", "SIL(LUB + VIB)", "SIL(LUB + VIB)", 32000.0, 34, ""], [2, "NLAG", "SIL(LUB + VIB)", "SIL(LUB + VIB)", 32000.0, 34, ""], [3, "NLAG", "SIL(LUB + VIB)", "SIL(LUB + VIB)", 32000.0, 34, ""], [4, "NLAG", "SIL(LUB + VIB)", "SIL(LUB + VIB)", 32000.0, 34, ""], [5, "NLAG", "SIL(LUB + VIB)", "SIL(LUB + VIB)", 32000.0, 34, ""], [6, "NLAG", "SIL(LUB + VIB)", "SIL(LUB + VIB)", 32000.0, 34, ""], [7, "NLAG", "SIL(LUB + VIB)", "SIL(LUB + VIB)", 32000.0, 34, ""], [8, "NLAG", "SIL(LUB + VIB)", "SIL(LUB + VIB)", 32000.0, 34, ""], [9, "NLAG", "SIL(LUB + VIB)", "SIL(LUB + VIB)", 32000.0, 34, ""], [10, "NLAG", "SIL(LUB + VIB)", "SIL(LUB + VIB)", 32000.0, 34, ""], [11, "NLAG", "SIL(LUB + VIB)", "SIL(LUB + VIB)", 32000.0, 34, ""], [0, "QUA", "PORTAS FLEXIVEIS", "PORTAS FLEXIVEIS", 40000.0, 35, ""], [1, "QUA", "PORTAS FLEXIVEIS", "PORTAS FLEXIVEIS", 40000.0, 35, ""], [2, "QUA", "PORTAS FLEXIVEIS", "PORTAS FLEXIVEIS", 40000.0, 35, ""], [3, "QUA", "PORTAS FLEXIVEIS", "PORTAS FLEXIVEIS", 40000.0, 35, ""], [4, "QUA", "PORTAS FLEXIVEIS", "PORTAS FLEXIVEIS", 40000.0, 35, ""], [5, "QUA", "PORTAS FLEXIVEIS", "PORTAS FLEXIVEIS", 40000.0, 35, ""], [6, "QUA", "PORTAS FLEXIVEIS", "PORTAS FLEXIVEIS", 40000.0, 35, ""], [7, "QUA", "PORTAS FLEXIVEIS", "PORTAS FLEXIVEIS", 40000.0, 35, ""], [8, "QUA", "PORTAS FLEXIVEIS", "PORTAS FLEXIVEIS", 40000.0, 35, ""], [9, "QUA", "PORTAS FLEXIVEIS", "PORTAS FLEXIVEIS", 40000.0, 35, ""], [10, "QUA", "PORTAS FLEXIVEIS", "PORTAS FLEXIVEIS", 40000.0, 35, ""], [11, "QUA", "PORTAS FLEXIVEIS", "PORTAS FLEXIVEIS", 40000.0, 35, ""], [8, "SHE", "REMBE", "REMBE", 26500.0, 36, ""], [2, "SOB", "BAUKO", "BAUKO", 3990.0, 37, ""], [5, "SOB", "BAUKO", "BAUKO", 3990.0, 37, ""], [8, "SOB", "BAUKO", "BAUKO", 3990.0, 37, ""], [11, "SOB", "BAUKO", "BAUKO", 10300.0, 37, ""]];
+function budgetSeedYear(y){const m=budgetBlank(y);BUDGET_SEED_2027.forEach(([mi,cat,name,forn,planned,id,obs])=>m[mi].demands.push({id:'O27-'+id+'-'+mi,name,category:cat,supplier:forn,planned,actual:0,saving:0,savingReason:'',completed:false,obs:obs||''}));return m;}
 function budgetLoad(){
   try{budgetAll=JSON.parse(localStorage.getItem(BUDGET_KEY)||'{}')||{};}catch(e){budgetAll={};}
-  budgetData=Array.isArray(budgetAll[budgetYear])&&budgetAll[budgetYear].length===12?budgetAll[budgetYear]:budgetBlank(budgetYear);
+  budgetData=Array.isArray(budgetAll[budgetYear])&&budgetAll[budgetYear].length===12?budgetAll[budgetYear]:(budgetYear===2027?budgetSeedYear(2027):budgetBlank(budgetYear));
   budgetData.forEach(x=>{x.demands=Array.isArray(x.demands)?x.demands:[];});
 }
 function budgetSave(){
@@ -1369,37 +1374,53 @@ function budgetParseMonth(v){
   if(/^\d{1,2}$/.test(s)){const n=Number(s);return n>=1&&n<=12?n-1:-1;}
   const i=BUDGET_MONTHS.findIndex(m=>s.startsWith(budgetNorm(m).slice(0,3)));return i;
 }
+function budgetHeaderMonth(c){
+  if(c instanceof Date&&!isNaN(c))return {mi:c.getMonth(),y:c.getFullYear()};
+  const m=String(c??'').trim().match(/^([A-Za-zÀ-ú]{3,})[\/\-\s.]+(\d{2,4})$/);if(!m)return null;
+  const mi=budgetParseMonth(m[1]);if(mi<0)return null;let y=Number(m[2]);if(y<100)y+=2000;return {mi,y};
+}
+function budgetGridToDemands(grid,defaultYear){
+  const alias={ano:['ano','year'],mes:['mes','month','periodo'],categoria:['categoria','tipo','area'],demanda:['demanda','nome','descricao','atividade','servico','item','materialitem','material'],fornecedor:['fornecedor','empresa','contratada'],planned:['orcamento','orcado','planejado','budget','valor','previsto'],actual:['realizado','real','gasto'],saving:['saving','economia'],reason:['justificativa','justificativadosaving','motivo'],obs:['observacoes','observacao','obs'],status:['status','situacao']};
+  const out=[];const mk=(r,y,mi,name,cat,forn,planned,extra={})=>out.push({y,mi,d:Object.assign({id:'D'+Date.now().toString(36)+Math.random().toString(36).slice(2,6)+'-'+r+'-'+mi,name,category:cat||'OUTROS',supplier:forn||'',planned:Math.max(0,planned),actual:0,saving:0,savingReason:'',completed:false},extra)});
+  for(let r=0;r<Math.min(grid.length,40);r++){
+    const row=grid[r]||[];const mcols=[];row.forEach((c,ci)=>{const hm=budgetHeaderMonth(c);if(hm)mcols.push({ci,...hm});});
+    const cols={};row.forEach((c,ci)=>{const n=budgetNorm(c);if(!n)return;for(const k in alias){if(cols[k]===undefined&&alias[k].some(a=>n===a))cols[k]=ci;}});
+    if(mcols.length>=6&&(cols.fornecedor!==undefined||cols.demanda!==undefined)){
+      for(let q=r+1;q<grid.length;q++){
+        const g=grid[q]||[];const cat=String(g[cols.categoria]??'').trim();const forn=String(g[cols.fornecedor]??'').trim();const item=String(g[cols.demanda]??'').trim();
+        if(/^total/i.test(cat)||/^total/i.test(forn)||(!forn&&!item))continue;
+        const obs=cols.obs!==undefined?String(g[cols.obs]??'').trim():'';
+        mcols.forEach(mc=>{const v=budgetNum(g[mc.ci]);if(v>0)mk(q,mc.y,mc.mi,item||forn,cat,forn,v,{obs});});
+      }
+      return out;
+    }
+    if(cols.demanda!==undefined&&cols.planned!==undefined){
+      for(let q=r+1;q<grid.length;q++){
+        const g=grid[q]||[];const name=String(g[cols.demanda]??'').trim();if(!name)continue;
+        let y=cols.ano!==undefined?Number(String(g[cols.ano]).slice(0,4)):defaultYear;if(!(y>=2000&&y<=2100))y=defaultYear;
+        let mi=cols.mes!==undefined?budgetParseMonth(g[cols.mes]):0;if(mi<0)mi=0;
+        const stat=budgetNorm(g[cols.status]);
+        mk(q,y,mi,name,String(g[cols.categoria]??'').trim(),String(g[cols.fornecedor]??'').trim(),budgetNum(g[cols.planned]),{actual:Math.max(0,budgetNum(g[cols.actual])),saving:Math.max(0,budgetNum(g[cols.saving])),savingReason:String(g[cols.reason]??''),completed:stat.startsWith('conclu')||stat==='ok'||stat==='sim'});
+      }
+      return out;
+    }
+  }
+  return out;
+}
 async function budgetImportFile(file){
   if(!window.XLSX){alert('Biblioteca Excel não carregada.');return;}
   const wb=XLSX.read(await file.arrayBuffer(),{type:'array',cellDates:true});
-  const alias={ano:['ano','year'],mes:['mes','month','periodo'],categoria:['categoria','tipo','area'],demanda:['demanda','nome','descricao','atividade','servico','item'],fornecedor:['fornecedor','empresa','contratada'],planned:['orcamento','orcamentor','orcado','planejado','budget','valor','previsto'],actual:['realizado','real','gasto'],saving:['saving','economia'],reason:['justificativa','justificativadosaving','motivo','observacao'],status:['status','situacao']};
-  const found=[];let imported=0;const years=new Set();const perYear={};
-  for(const sn of wb.SheetNames){
-    const grid=XLSX.utils.sheet_to_json(wb.Sheets[sn],{header:1,raw:true,defval:''});
-    let hi=-1,map={};
-    for(let r=0;r<Math.min(grid.length,30);r++){
-      const m={};grid[r].forEach((c,ci)=>{const n=budgetNorm(c);if(!n)return;for(const k in alias){if(m[k]===undefined&&alias[k].some(a=>n===a||n.startsWith(a)))m[k]=ci;}});
-      if(m.demanda!==undefined&&m.planned!==undefined){hi=r;map=m;break;}
-      if(Object.keys(m).length>Object.keys(found).length)found.length=0;
-    }
-    if(hi<0)continue;
-    for(let r=hi+1;r<grid.length;r++){
-      const row=grid[r],name=String(row[map.demanda]??'').trim();if(!name)continue;
-      let y=map.ano!==undefined?Number(String(row[map.ano]).slice(0,4)):budgetYear;if(!(y>=2000&&y<=2100))y=budgetYear;
-      let mi=map.mes!==undefined?budgetParseMonth(row[map.mes]):0;if(mi<0)mi=0;
-      const stat=budgetNorm(row[map.status]);
-      (perYear[y]=perYear[y]||[]).push({mi,d:{id:'D'+Date.now().toString(36)+Math.random().toString(36).slice(2,6)+r,name,category:String(row[map.categoria]??'OUTROS').trim()||'OUTROS',supplier:String(row[map.fornecedor]??'').trim(),planned:Math.max(0,budgetNum(row[map.planned])),actual:Math.max(0,budgetNum(row[map.actual])),saving:Math.max(0,budgetNum(row[map.saving])),savingReason:String(row[map.reason]??''),completed:stat.startsWith('conclu')||stat==='ok'||stat==='sim'}});
-      imported++;
-    }
-  }
-  if(!imported){alert('Não encontrei as colunas na planilha. O cabeçalho precisa ter pelo menos "Demanda" e "Orçamento" (opcionais: Ano, Mês, Categoria, Fornecedor, Realizado, Saving, Justificativa, Status). Dica: use "Exportar BUDGET Excel" para ver o formato.');return;}
-  const ys=Object.keys(perYear);
-  if(!confirm(`Importar ${imported} demandas para o(s) ano(s) ${ys.join(', ')}?\nAs demandas atuais desse(s) ano(s) serão substituídas.`))return;
+  let list=[];
+  for(const sn of wb.SheetNames){const grid=XLSX.utils.sheet_to_json(wb.Sheets[sn],{header:1,raw:true,defval:''});const got=budgetGridToDemands(grid,budgetYear);if(got.length){list=got;break;}}
+  if(!list.length){alert('Não encontrei as colunas na planilha. Preciso de um cabeçalho com Fornecedor (ou Demanda) e os meses (Jan/27 ... Dez/27), ou com Demanda e Orçamento.');return;}
+  const perYear={};list.forEach(x=>(perYear[x.y]=perYear[x.y]||[]).push(x));
+  const ys=Object.keys(perYear);const total=list.reduce((s,x)=>s+x.d.planned,0);
+  if(!confirm(`Importar ${list.length} lançamentos (total ${budgetFmt(total)}) para o(s) ano(s) ${ys.join(', ')}?\nO que existe hoje nesse(s) ano(s) será substituído.`))return;
   try{budgetAll=JSON.parse(localStorage.getItem(BUDGET_KEY)||'{}')||{};}catch(e){budgetAll={};}
   ys.forEach(y=>{const months=budgetBlank(y);perYear[y].forEach(({mi,d})=>months[mi].demands.push(d));budgetAll[y]=months;});
   localStorage.setItem(BUDGET_KEY,JSON.stringify(budgetAll));
-  if(ys.length&&!ys.includes(String(budgetYear)))budgetYear=Number(ys[0]);
-  budgetRender();alert(`${imported} demandas importadas.`);
+  if(!ys.includes(String(budgetYear)))budgetYear=Number(ys[0]);
+  budgetRender();alert(`${list.length} lançamentos importados e gravados.`);
 }
 document.getElementById('budgetFile').addEventListener('change',async e=>{const f=e.target.files[0];e.target.value='';if(!f)return;try{await budgetImportFile(f);}catch(err){console.error(err);alert('Erro ao ler a planilha: '+err.message);}});
 
@@ -1533,11 +1554,14 @@ window.sheFirebaseSaveMovementHistory=async(records)=>{if(!connected||!db||!auth
 window.sheFirebaseUploadMovementEvidence=async(movementId,file)=>{if(!connected||!storage||!auth?.currentUser)throw new Error('Faça login no Firebase para sincronizar evidências.');const safe=file.name.replace(/[^a-zA-Z0-9._-]/g,'_');const path=`she-critico-historico/${movementId}/${Date.now()}-${safe}`;const target=ref(storage,path);await uploadBytes(target,file,{contentType:file.type||'application/octet-stream'});return{storagePath:path,url:await getDownloadURL(target)}};
 window.sheFirebaseUploadCertificate=async(equipmentId,fileId,file)=>{
  if(!connected||!auth?.currentUser)throw new Error('Faça login no Firebase antes de enviar PDFs.');
- if(storage){
+ if(storage&&!window.__storageDown){
   try{
    const path=`she-critico-certificados/${equipmentId}/${fileId}-${(file.name||'certificado.pdf').replace(/[^a-zA-Z0-9._-]/g,'_')}`;
-   const target=ref(storage,path);await uploadBytes(target,file,{contentType:file.type||'application/pdf'});const fileUrl=await getDownloadURL(target);return{storagePath:path,fileUrl,chunks:0};
-  }catch(err){console.warn('Storage indisponível, usando Firestore',err);}
+   const target=ref(storage,path);
+   const up=(async()=>{await uploadBytes(target,file,{contentType:file.type||'application/pdf'});return await getDownloadURL(target)})();
+   const fileUrl=await Promise.race([up,new Promise((_,rej)=>setTimeout(()=>rej(new Error('Storage sem resposta')),6000))]);
+   return{storagePath:path,fileUrl,chunks:0};
+  }catch(err){window.__storageDown=true;console.warn('Storage indisponível, usando Firestore',err);}
  }
  // Alternativa sem Storage (plano Spark): grava o PDF em pedaços no Firestore.
  if(file.size>8*1024*1024)throw new Error('PDF maior que 8 MB: reduza o arquivo ou ative o Firebase Storage.');
