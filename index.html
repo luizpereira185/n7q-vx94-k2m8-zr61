@@ -946,7 +946,7 @@ function saveEq(){
     Object.assign(target,o);
     if(changed.length)addEqHistory(target,'Equipamento alterado',`Campos: ${changed.join(', ')}`);
   }else{
-    const created={id:'EQ'+String(data.length+1).padStart(3,'0'),certs:[],history:[],correctiveActions:[],...o};
+    const created={id:'EQ'+Date.now().toString(36),certs:[],history:[],correctiveActions:[],...o};
     addEqHistory(created,'Equipamento cadastrado',`Cadastro de ${created.nome} (${created.floc||'sem FLOC'})`);
     data.push(created);
     recordEquipmentMovement('Inclusão',created);
@@ -1261,7 +1261,7 @@ window.addEventListener('resize',()=>{if(!document.getElementById('budget').hidd
 
 <script type="module">
 import { initializeApp, getApps } from 'https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js';
-import { getAuth, signInWithEmailAndPassword, signOut } from 'https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js';
+import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js';
 import { getFirestore, collection, doc, getDocs, onSnapshot, writeBatch, setDoc } from 'https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js';
 import { getStorage, ref, uploadBytes, getDownloadURL } from 'https://www.gstatic.com/firebasejs/10.12.5/firebase-storage.js';
 const DEFAULT_CONFIG={apiKey:'AIzaSyDrEIOl0jg-Tzh8XFrdAfPrAa5xWJfKpGM',authDomain:'gest-ea7ff.firebaseapp.com',projectId:'gest-ea7ff',storageBucket:'gest-ea7ff.firebasestorage.app',messagingSenderId:'20233378878',appId:'1:20233378878:web:3fb74fcc627c5f03af056f'};
@@ -1379,12 +1379,18 @@ window.sheFirebaseUploadCertificate=async(equipmentId,fileId,file)=>{
  const path=`she-critico-certificados/${equipmentId}/${fileId}-${(file.name||'certificado.pdf').replace(/[^a-zA-Z0-9._-]/g,'_')}`;
  const target=ref(storage,path);await uploadBytes(target,file,{contentType:file.type||'application/pdf'});const fileUrl=await getDownloadURL(target);return{storagePath:path,fileUrl};
 };
+let syncing=null;
+function ensureSync(){
+ if(connected) return Promise.resolve();
+ if(!syncing) syncing=syncInitial().finally(()=>{syncing=null});
+ return syncing;
+}
 window.sheFirebaseLogin=async(password)=>{
  init();
  const saved=getConfig();
  if(JSON.stringify(saved)!==JSON.stringify(DEFAULT_CONFIG)){app=null;init(saved)}
  const cred=await signInWithEmailAndPassword(auth,MASTER_EMAIL,password);
- await syncInitial();
+ await ensureSync();
  return cred.user;
 };
 window.sheFirebaseLogout=async()=>{try{if(unsubscribe)unsubscribe();unsubscribe=null;if(historyUnsubscribe)historyUnsubscribe();historyUnsubscribe=null;if(siteStateUnsubscribe)siteStateUnsubscribe();siteStateUnsubscribe=null;connected=false;if(auth?.currentUser)await signOut(auth);setStatus('desconectado',false)}catch(e){console.warn(e)}};
@@ -1397,6 +1403,15 @@ window.sheFirebaseErrorMessage=(err)=>{
  return'Falha Firebase: '+(err?.message||code||'erro desconhecido');
 };
 window.sheFirebaseConnectTest=async(config)=>{try{if(config.projectId!=='gest-ea7ff')throw new Error('Use a configuração do projeto GestaoSHE (gest-ea7ff).');localStorage.setItem('fbcfg',JSON.stringify(config));app=null;init(config);setStatus('projeto GestaoSHE configurado. Faça login para validar a sincronização.',true);toast('Projeto GestaoSHE configurado. Entre com a senha mestre para testar.')}catch(e){setStatus('erro na configuração: '+e.message,false)}};
+init();
+onAuthStateChanged(auth, async (user)=>{
+ if(user){
+  try{ await ensureSync(); sessionStorage.setItem('iris_auth','1'); document.body.classList.add('logged-in'); }
+  catch(e){ console.error(e); try{setStatus(window.sheFirebaseErrorMessage?window.sheFirebaseErrorMessage(e):e.message,false)}catch(_){} }
+ } else {
+  sessionStorage.removeItem('iris_auth'); document.body.classList.remove('logged-in');
+ }
+});
 try{const cfg=getConfig();document.getElementById('cfg').value=JSON.stringify(DEFAULT_CONFIG,null,2);localStorage.setItem('fbcfg',JSON.stringify(DEFAULT_CONFIG));setStatus('projeto GestaoSHE configurado. Entre com a conta mestre.',true)}catch(e){console.warn(e)}
 </script>
 
