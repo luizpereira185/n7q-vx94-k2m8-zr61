@@ -433,7 +433,7 @@ table{color:#173b67!important}th{background:#edf5fa!important;color:#174a78!impo
     <input id="certQ" placeholder="Buscar certificado, equipamento, FLOC, fornecedor…">
     <select id="certCat"><option value="">Todas categorias</option><option>SHE</option><option>QUA</option><option>SOB</option></select>
     <select id="certYear"><option value="">Todos os anos</option></select><span class="muted" style="font-size:11px;align-self:center">Inclui relatórios de 2025</span><button class="btn ghost" type="button" onclick="certCollapseAll(true)">▸ Recolher todos</button><button class="btn ghost" type="button" onclick="certCollapseAll(false)">▾ Expandir todos</button>
-    <select id="certStatus"><option value="">Todos status</option><option>Vencido</option><option>A vencer</option><option>Em dia</option><option>Sem certificado</option></select>
+    <select id="certStatus"><option value="">Todos status</option><option>Vencido</option><option>A vencer</option><option>Em dia</option><option>Substituído</option><option>Sem certificado</option></select>
     <select id="certCoverage"><option value="">Todos os controles</option><option value="faltando">Faltando certificado</option><option value="completo">Completo</option><option value="naoaplicavel">Periodicidade não definida</option><option value="assinatura">Pendente assinatura Engenharia</option></select>
     <button class="btn" type="button" onclick="openNewCertM()">+ Novo certificado</button>
   </div>
@@ -725,6 +725,8 @@ function certMatchesYear(c,year){
   return (cy||vy)===y;
 }
 function certStatusFrom(c){if(!c||!c.val)return'Sem certificado';const d=days(c.val);return d<0?'Vencido':d<=30?'A vencer':'Em dia'}
+function certIsSuperseded(e,c){return !!(c&&c.val&&(e.certs||[]).some(o=>o&&o.val&&o.val>c.val))}
+function certStatusEq(e,c){const st=certStatusFrom(c);return((st==='Vencido'||st==='A vencer')&&certIsSuperseded(e,c))?'Substituído':st}
 function certStatus(e){const cs=Array.isArray(e.certs)?e.certs:[];return cs.length?certStatusFrom(cs.slice().sort((a,b)=>(b.val||'').localeCompare(a.val||''))[0]):'Sem certificado'}
 function certsForYear(e,year){const cs=Array.isArray(e.certs)?e.certs:[];return year?cs.filter(c=>certMatchesYear(c,year)):cs}
 function coverage(e,year){
@@ -827,9 +829,9 @@ async function openCertFile(fileId,fileUrl,chunks){
 }
 async function removeCertFile(id,index,fi){const e=data.find(x=>x.id===id);const c=e?.certs?.[index];if(!c)return;const fl=certFiles(c).slice();const f=fl[fi];if(!f||!confirm('Remover o PDF '+(f.fileName||'')+'?'))return;try{await idbDel(f.fileId)}catch(_){}fl.splice(fi,1);c.files=fl;const f0=fl[0]||{};c.fileId=f0.fileId||'';c.fileName=f0.fileName||'';c.fileType=f0.fileType||'';c.storagePath=f0.storagePath||'';c.fileUrl=f0.fileUrl||'';c.chunks=f0.chunks||0;addEqHistory(e,'PDF removido do certificado',f.fileName||'PDF');persistData();certs();toast('PDF removido.')}
 function renderCertItem(e,c,i){
-  const st=certStatusFrom(c),d=days(c.val),sign=c.assinadoEngenharia===true;
+  const st=certStatusEq(e,c),d=days(c.val),sign=c.assinadoEngenharia===true;
   const fl=certFiles(c);const fileHtml=fl.length?'<br>'+fl.map((f,fi)=>'<span style="display:inline-flex;gap:4px;margin:2px 6px 2px 0;align-items:center"><button class="cert-file" type="button" onclick="openCertFile(\''+f.fileId+'\',\''+(f.fileUrl||'').replace(/'/g,'%27')+'\','+(Number(f.chunks)||0)+')">📎 '+escHtml((f.fileName||'PDF').slice(0,38))+'</button><button class="cert-file" type="button" title="Remover este PDF" onclick="removeCertFile(\''+e.id+'\','+i+','+fi+')">✕</button></span>').join(''):'<br><small style="color:var(--warn)">Sem PDF anexado</small>';
-  return '<div class="cert-item"><div><b>📄 '+escHtml(c.nome||'Certificado')+'</b><br><small>'+escHtml(c.fornecedor||e.forn||'—')+'</small>'+fileHtml+'<label class="cert-sign"><input type="checkbox" '+(sign?'checked':'')+' onchange="toggleEngineering(\''+e.id+'\','+i+',this.checked)"> OK — assinado pela Engenharia</label></div><div><small>Calibração</small><br><b>'+fmt(c.cal||'')+'</b></div><div><small>Validade</small><br><b>'+(c.meses?c.meses+' meses':'—')+'</b></div><div><small>Vencimento</small><br><b>'+fmt(c.val)+'</b><br><span class="'+stClass(st)+'">'+(d<0?(-d)+' dias vencido':d+' dias')+'</span></div><div class="cert-actions"><button class="btn ghost" onclick="editCert(\''+e.id+'\','+i+')">Editar</button><button class="btn ghost" onclick="removeCert(\''+e.id+'\','+i+')">Excluir</button></div></div>';
+  return '<div class="cert-item"><div><b>📄 '+escHtml(c.nome||'Certificado')+'</b><br><small>'+escHtml(c.fornecedor||e.forn||'—')+'</small>'+fileHtml+'<label class="cert-sign"><input type="checkbox" '+(sign?'checked':'')+' onchange="toggleEngineering(\''+e.id+'\','+i+',this.checked)"> OK — assinado pela Engenharia</label></div><div><small>Calibração</small><br><b>'+fmt(c.cal||'')+'</b></div><div><small>Validade</small><br><b>'+(c.meses?c.meses+' meses':'—')+'</b></div><div><small>Vencimento</small><br><b>'+fmt(c.val)+'</b><br><span class="'+(st==='Substituído'?'badge':stClass(st))+'">'+(st==='Substituído'?'Substituído (há certificado mais novo)':(d<0?(-d)+' dias vencido':d+' dias'))+'</span></div><div class="cert-actions"><button class="btn ghost" onclick="editCert(\''+e.id+'\','+i+')">Editar</button><button class="btn ghost" onclick="removeCert(\''+e.id+'\','+i+')">Excluir</button></div></div>';
 }
 function certs(){
   const q=(document.getElementById('certQ')?.value||'').toLowerCase();
@@ -840,7 +842,7 @@ function certs(){
   const filtered=data.filter(e=>{
     const cs=certsForYear(e,year); const allcs=Array.isArray(e.certs)?e.certs:[];
     const txt=(e.nome+' '+e.floc+' '+(e.forn||'')+' '+allcs.map(c=>c.nome||'').join(' ')+' '+(e.evidenciaSAP||'')+' '+(e.plano||'')+' '+(e.tipoAtividade||'') ).toLowerCase();
-    const statusMatch=!fs||cs.some(c=>certStatusFrom(c)===fs)||(fs==='Sem certificado'&&!cs.length);
+    const statusMatch=!fs||cs.some(c=>certStatusEq(e,c)===fs)||(fs==='Sem certificado'&&!cs.length);
     const cv=coverage(e,year||new Date().getFullYear());
     const covMatch=!cov||(cov==='assinatura'?cs.some(c=>c.assinadoEngenharia!==true):cv.state===cov);
     return(!q||txt.includes(q))&&(!cat||e.cat===cat)&&statusMatch&&covMatch;
@@ -848,9 +850,9 @@ function certs(){
   const selectedYear=year?Number(year):null;
   const allCerts=data.flatMap(e=>(Array.isArray(e.certs)?e.certs:[]).filter(c=>certMatchesYear(c,selectedYear)).map(c=>({...c,e})));
   const total=allCerts.length;
-  const venc=allCerts.filter(x=>certStatusFrom(x)==='Vencido').length;
-  const av=allCerts.filter(x=>certStatusFrom(x)==='A vencer').length;
-  const ok=allCerts.filter(x=>certStatusFrom(x)==='Em dia').length;
+  const venc=allCerts.filter(x=>certStatusEq(x.e,x)==='Vencido').length;
+  const av=allCerts.filter(x=>certStatusEq(x.e,x)==='A vencer').length;
+  const ok=allCerts.filter(x=>certStatusEq(x.e,x)==='Em dia').length;
   const pendingSign=allCerts.filter(x=>x.assinadoEngenharia!==true).length;
   document.getElementById('certKpis').innerHTML=[
     ['Total',total,'var(--y)',selectedYear?`Certificados cadastrados em ${selectedYear}`:'Certificados cadastrados'],
@@ -862,8 +864,8 @@ function certs(){
   const counts=months.map(m=>allCerts.filter(x=>{const d=x.val?new Date(x.val+'T00:00:00'):null;return d&&d.getFullYear()===m.y&&d.getMonth()===m.m}).length);
   const mx=Math.max(1,...counts);
   document.getElementById('certBars').innerHTML=months.map((m,i)=>`<div class="cert-month"><b>${counts[i]||''}</b><div class="bar" style="height:${Math.max(2,counts[i]/mx*100)}%"></div><em>${m.n}</em></div>`).join('');
-  const alerts=allCerts.filter(x=>['Vencido','A vencer'].includes(certStatusFrom(x))).sort((a,b)=>(a.val||'9999').localeCompare(b.val||'9999')).slice(0,8);
-  document.getElementById('certAlerts').innerHTML=alerts.length?alerts.map(x=>{const d=days(x.val),st=certStatusFrom(x);return `<div class="cert-alert"><span class="tag" style="background:${COL[x.e.cat]}">${x.e.cat}</span><div class="info"><b>${escHtml(x.e.nome)}</b><small>📄 ${escHtml(x.nome||'certificado')} · Vence ${fmt(x.val)}</small></div><span class="${stClass(st)}">${d<0?(-d)+' dias vencido':d+' dias'}</span></div>`}).join(''):'<div style="color:var(--mut)">Nenhum certificado crítico.</div>';
+  const alerts=allCerts.filter(x=>['Vencido','A vencer'].includes(certStatusEq(x.e,x))).sort((a,b)=>(a.val||'9999').localeCompare(b.val||'9999')).slice(0,8);
+  document.getElementById('certAlerts').innerHTML=alerts.length?alerts.map(x=>{const d=days(x.val),st=certStatusEq(x.e,x);return `<div class="cert-alert"><span class="tag" style="background:${COL[x.e.cat]}">${x.e.cat}</span><div class="info"><b>${escHtml(x.e.nome)}</b><small>📄 ${escHtml(x.nome||'certificado')} · Vence ${fmt(x.val)}</small></div><span class="${stClass(st)}">${d<0?(-d)+' dias vencido':d+' dias'}</span></div>`}).join(''):'<div style="color:var(--mut)">Nenhum certificado crítico.</div>';
   // completude por categoria
   const cats=['SHE','QUA','SOB'];
   document.getElementById('certCompleteness').innerHTML=cats.map(c=>{
