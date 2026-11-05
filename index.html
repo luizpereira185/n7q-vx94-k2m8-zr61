@@ -610,7 +610,7 @@ table{color:#173b67!important}th{background:#edf5fa!important;color:#174a78!impo
     <div class="form">
       <label class="full">Equipamento<select id="cf_eq"></select></label>
       <label class="full">Arquivo PDF / certificado
-        <input id="cf_file" type="file" accept=".pdf,application/pdf,image/*">
+        <input id="cf_file" type="file" accept=".pdf,application/pdf,image/*" multiple>
       </label>
       <label>Data de calibração<input id="cf_cal" type="date"></label>
       <label>Validade (meses)<input id="cf_months" type="number" min="1" step="1" value="12"></label>
@@ -618,7 +618,7 @@ table{color:#173b67!important}th{background:#edf5fa!important;color:#174a78!impo
       <label>Fornecedor<input id="cf_forn" placeholder="Fornecedor / laboratório"></label>
       <label class="full">Observação<textarea id="cf_obs" rows="2" placeholder="Observação do certificado"></textarea></label>
       <label class="full" style="display:flex;align-items:center;gap:8px"><input id="cf_assinado" type="checkbox" style="width:auto;accent-color:var(--ok)"> OK — certificado assinado / validado pela Engenharia</label>
-      <div class="cert-form-note full">Informe a data de calibração e a validade. O sistema calcula automaticamente a data de vencimento. Você pode cadastrar vários certificados para o mesmo equipamento. O PDF ficará anexado ao equipamento nesta tela.</div>
+      <div class="cert-form-note full">Informe a data de calibração e a validade. O sistema calcula automaticamente a data de vencimento. Você pode cadastrar vários certificados para o mesmo equipamento. Você pode selecionar vários PDFs de uma vez; todos ficam anexados ao certificado e ao equipamento.</div>
     </div>
     <div class="acts"><button class="btn ghost" onclick="closeCertM()">Cancelar</button><button class="btn" onclick="saveCert()">Salvar certificado</button></div>
   </div>
@@ -805,10 +805,23 @@ function equipmentDetailHtml(e){
   const actionHtml=actions.length?actions.map(a=>`<div class="eq-action-item ${a.status==='Concluída'?'done':''}"><input type="checkbox" ${a.status==='Concluída'?'checked':''} onchange="toggleCorrectiveAction('${e.id}','${a.id}',this.checked)" title="Marcar como concluída"><div class="action-text">${escHtml(a.text)}<small>${escHtml(a.status||'Em andamento')} · ${a.createdAt?new Date(a.createdAt).toLocaleDateString('pt-BR'):''}</small></div><button class="btn ghost eq-delete-btn" type="button" onclick="deleteCorrectiveAction('${e.id}','${a.id}')">Excluir</button></div>`).join(''):'<div class="eq-action-item">Nenhuma ação corretiva cadastrada.</div>';
   return `<tr class="eq-detail-row" id="eqdetail-${e.id}" hidden><td colspan="12"><div class="eq-detail"><div class="eq-detail-grid"><section><h4>▸ Ações corretivas / subtópicos</h4><div class="eq-action-form"><input id="action-input-${e.id}" placeholder="Descreva uma ação corretiva ou subtópico..." onkeydown="if(event.key===\'Enter\')addCorrectiveAction('${e.id}')"><button class="btn" type="button" onclick="addCorrectiveAction('${e.id}')">＋ Adicionar</button></div><div class="eq-action-list">${actionHtml}</div></section><section><h4>▸ Histórico de movimentações e alterações</h4><div class="eq-history-list">${historyHtml(e)}</div></section></div><div class="eq-detail-actions"><button class="btn ghost eq-delete-btn" type="button" onclick="deleteEquipment('${e.id}')">🗑 Excluir equipamento</button></div></div></td></tr>`;
 }
-async function openCertFile(fileId,fileUrl){if(fileUrl){window.open(fileUrl,'_blank','noopener');return}if(!fileId)return toast('Nenhum PDF anexado a este certificado.');try{const blob=await idbGet(fileId);if(!blob)return toast('PDF ainda não sincronizado com o Firebase neste navegador.');const url=URL.createObjectURL(blob);const w=window.open(url,'_blank');if(!w){const a=document.createElement('a');a.href=url;a.download=blob.name||'certificado.pdf';a.click()}setTimeout(()=>URL.revokeObjectURL(url),60000)}catch(err){toast('Não foi possível abrir o PDF.')}}
+function certFiles(c){if(!c)return[];if(Array.isArray(c.files)&&c.files.length)return c.files;return c.fileId?[{fileId:c.fileId,fileName:c.fileName||c.nome||'certificado.pdf',fileType:c.fileType||'application/pdf',storagePath:c.storagePath||'',fileUrl:c.fileUrl||'',chunks:c.chunks||0}]:[]}
+async function openCertFile(fileId,fileUrl,chunks){
+  if(fileUrl){window.open(fileUrl,'_blank','noopener');return}
+  if(!fileId)return toast('Nenhum PDF anexado a este certificado.');
+  try{
+    let blob=await idbGet(fileId);
+    if(!blob&&window.sheFirebaseDownloadCertificate){toast('Baixando PDF da nuvem...');blob=await window.sheFirebaseDownloadCertificate(fileId,chunks);}
+    if(!blob)return toast('PDF não encontrado neste navegador nem na nuvem.');
+    const url=URL.createObjectURL(blob);const w=window.open(url,'_blank');
+    if(!w){const a=document.createElement('a');a.href=url;a.download=blob.name||'certificado.pdf';a.click()}
+    setTimeout(()=>URL.revokeObjectURL(url),60000);
+  }catch(err){console.error(err);toast('Não foi possível abrir o PDF: '+(err.message||err));}
+}
+async function removeCertFile(id,index,fi){const e=data.find(x=>x.id===id);const c=e?.certs?.[index];if(!c)return;const fl=certFiles(c).slice();const f=fl[fi];if(!f||!confirm('Remover o PDF '+(f.fileName||'')+'?'))return;try{await idbDel(f.fileId)}catch(_){}fl.splice(fi,1);c.files=fl;const f0=fl[0]||{};c.fileId=f0.fileId||'';c.fileName=f0.fileName||'';c.fileType=f0.fileType||'';c.storagePath=f0.storagePath||'';c.fileUrl=f0.fileUrl||'';c.chunks=f0.chunks||0;addEqHistory(e,'PDF removido do certificado',f.fileName||'PDF');persistData();certs();toast('PDF removido.')}
 function renderCertItem(e,c,i){
   const st=certStatusFrom(c),d=days(c.val),sign=c.assinadoEngenharia===true;
-  const fileHtml=c.fileId?'<br><button class="cert-file" type="button" onclick="openCertFile(\''+c.fileId+'\')">📎 Abrir PDF</button>':'<br><small style="color:var(--warn)">Sem PDF anexado</small>';
+  const fl=certFiles(c);const fileHtml=fl.length?'<br>'+fl.map((f,fi)=>'<span style="display:inline-flex;gap:4px;margin:2px 6px 2px 0;align-items:center"><button class="cert-file" type="button" onclick="openCertFile(\''+f.fileId+'\',\''+(f.fileUrl||'').replace(/'/g,'%27')+'\','+(Number(f.chunks)||0)+')">📎 '+escHtml((f.fileName||'PDF').slice(0,38))+'</button><button class="cert-file" type="button" title="Remover este PDF" onclick="removeCertFile(\''+e.id+'\','+i+','+fi+')">✕</button></span>').join(''):'<br><small style="color:var(--warn)">Sem PDF anexado</small>';
   return '<div class="cert-item"><div><b>📄 '+escHtml(c.nome||'Certificado')+'</b><br><small>'+escHtml(c.fornecedor||e.forn||'—')+'</small>'+fileHtml+'<label class="cert-sign"><input type="checkbox" '+(sign?'checked':'')+' onchange="toggleEngineering(\''+e.id+'\','+i+',this.checked)"> OK — assinado pela Engenharia</label></div><div><small>Calibração</small><br><b>'+fmt(c.cal||'')+'</b></div><div><small>Validade</small><br><b>'+(c.meses?c.meses+' meses':'—')+'</b></div><div><small>Vencimento</small><br><b>'+fmt(c.val)+'</b><br><span class="'+stClass(st)+'">'+(d<0?(-d)+' dias vencido':d+' dias')+'</span></div><div class="cert-actions"><button class="btn ghost" onclick="editCert(\''+e.id+'\','+i+')">Editar</button><button class="btn ghost" onclick="removeCert(\''+e.id+'\','+i+')">Excluir</button></div></div>';
 }
 function certs(){
@@ -891,19 +904,27 @@ function calcCertVal(){const cal=document.getElementById('cf_cal').value,months=
 document.getElementById('cf_cal').addEventListener('change',calcCertVal);document.getElementById('cf_months').addEventListener('input',calcCertVal);document.getElementById('cf_eq').addEventListener('change',()=>{const e=data.find(x=>x.id===document.getElementById('cf_eq').value);if(e&&!document.getElementById('cf_forn').value)document.getElementById('cf_forn').value=e.forn||''});
 async function saveCert(){
   const selectedId=document.getElementById('cf_eq').value,index=certEditing.index,e=data.find(x=>x.id===selectedId);if(!e)return toast('Selecione um equipamento');
-  const oldEq=certEditing.eqId?data.find(x=>x.id===certEditing.eqId):null;const old=index!==null&&oldEq?.certs?.[index]?oldEq.certs[index]:null;const file=document.getElementById('cf_file').files[0];
+  const oldEq=certEditing.eqId?data.find(x=>x.id===certEditing.eqId):null;const old=index!==null&&oldEq?.certs?.[index]?oldEq.certs[index]:null;const newFiles=[...document.getElementById('cf_file').files];const file=newFiles[0];
   const cal=document.getElementById('cf_cal').value,meses=Math.max(1,parseInt(document.getElementById('cf_months').value||12));if(!cal)return toast('Informe a data de calibração');calcCertVal();const val=document.getElementById('cf_val').value;if(!val)return toast('Não foi possível calcular o vencimento');
   if(!Array.isArray(e.certs))e.certs=[];
-  let fileId=old?.fileId||'';
-  let storageMeta={storagePath:old?.storagePath||'',fileUrl:old?.fileUrl||''};
-  if(file){fileId='CERT-'+Date.now()+'-'+Math.random().toString(36).slice(2);await idbPut(fileId,file);if(window.sheFirebaseUploadCertificate){try{storageMeta=await window.sheFirebaseUploadCertificate(e.id,fileId,file)}catch(err){console.warn('PDF salvo localmente; upload Firebase pendente',err)}}}
-  const c={nome:file?file.name:(old?.nome||'Certificado.pdf'),cal,val,meses,fornecedor:document.getElementById('cf_forn').value.trim(),obs:document.getElementById('cf_obs').value.trim(),assinadoEngenharia:document.getElementById('cf_assinado').checked,fileId,fileName:file?.name||old?.fileName||'',fileType:file?.type||old?.fileType||'application/pdf',...storageMeta};
+  let files=certFiles(old).slice();let upErr=0;
+  if(newFiles.length){toast('Enviando '+newFiles.length+' arquivo(s)...');}
+  for(const f of newFiles){
+    const fileId='CERT-'+Date.now()+'-'+Math.random().toString(36).slice(2);
+    await idbPut(fileId,f);
+    let meta={storagePath:'',fileUrl:'',chunks:0};
+    if(window.sheFirebaseUploadCertificate){try{meta=await window.sheFirebaseUploadCertificate(e.id,fileId,f)}catch(err){upErr++;console.warn('PDF salvo localmente; upload Firebase pendente',err)}}
+    files.push({fileId,fileName:f.name,fileType:f.type||'application/pdf',storagePath:meta.storagePath||'',fileUrl:meta.fileUrl||'',chunks:meta.chunks||0});
+  }
+  const f0=files[0]||{};
+  const c={nome:file?(newFiles.length>1?file.name+' (+'+(newFiles.length-1)+')':file.name):(old?.nome||'Certificado.pdf'),cal,val,meses,fornecedor:document.getElementById('cf_forn').value.trim(),obs:document.getElementById('cf_obs').value.trim(),assinadoEngenharia:document.getElementById('cf_assinado').checked,files,fileId:f0.fileId||'',fileName:f0.fileName||'',fileType:f0.fileType||'application/pdf',storagePath:f0.storagePath||'',fileUrl:f0.fileUrl||'',chunks:f0.chunks||0};
+  if(upErr)setTimeout(()=>toast('Atenção: '+upErr+' PDF(s) ficaram só neste navegador (falha no envio à nuvem).'),600);
   if(index!==null&&oldEq&&oldEq.id===e.id){e.certs[index]=c;addEqHistory(e,'Certificado atualizado',c.nome+' · Vencimento '+fmt(c.val));}
   else {e.certs.push(c);addEqHistory(e,'Certificado adicionado',c.nome+' · Vencimento '+fmt(c.val));}
   persistData();closeCertM();certs();toast((index!==null?'Certificado atualizado: ':'Certificado adicionado: ')+c.nome)
 }
 function editCert(id,index){openCertM(id,index)}
-async function removeCert(id,index){const e=data.find(x=>x.id===id);if(!e||!Array.isArray(e.certs))return;const c=e.certs[index];if(!confirm('Excluir o certificado '+(c?.nome||'selecionado')+'?'))return;if(c?.fileId)try{await idbDel(c.fileId)}catch(_){}e.certs.splice(index,1);addEqHistory(e,'Certificado excluído',c?.nome||'Certificado');persistData();certs();toast('Certificado removido.')}
+async function removeCert(id,index){const e=data.find(x=>x.id===id);if(!e||!Array.isArray(e.certs))return;const c=e.certs[index];if(!confirm('Excluir o certificado '+(c?.nome||'selecionado')+'?'))return;for(const f of certFiles(c)){try{await idbDel(f.fileId)}catch(_){}}e.certs.splice(index,1);addEqHistory(e,'Certificado excluído',c?.nome||'Certificado');persistData();certs();toast('Certificado removido.')}
 async function toggleEngineering(id,index,checked){const e=data.find(x=>x.id===id);if(!e?.certs?.[index])return;e.certs[index].assinadoEngenharia=checked;addEqHistory(e,'Validação de Engenharia',`${e.certs[index].nome||'Certificado'} — ${checked?'assinado/validado':'assinatura removida'}`);persistData();certs();toast(checked?'Certificado marcado como OK pela Engenharia.':'Assinatura da Engenharia removida.')}
 function attach(id,inp){const f=inp.files[0];if(!f)return;openCertM(id);document.getElementById('cf_file').files=inp.files}
 
@@ -1389,7 +1410,7 @@ window.addEventListener('resize',()=>{if(!document.getElementById('budget').hidd
 <script type="module">
 import { initializeApp, getApps } from 'https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js';
 import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js';
-import { getFirestore, collection, doc, getDocs, onSnapshot, writeBatch, setDoc } from 'https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js';
+import { getFirestore, collection, doc, getDocs, onSnapshot, writeBatch, setDoc, getDoc } from 'https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js';
 import { getStorage, ref, uploadBytes, getDownloadURL } from 'https://www.gstatic.com/firebasejs/10.12.5/firebase-storage.js';
 const DEFAULT_CONFIG={apiKey:'AIzaSyDrEIOl0jg-Tzh8XFrdAfPrAa5xWJfKpGM',authDomain:'gest-ea7ff.firebaseapp.com',projectId:'gest-ea7ff',storageBucket:'gest-ea7ff.firebasestorage.app',messagingSenderId:'20233378878',appId:'1:20233378878:web:3fb74fcc627c5f03af056f'};
 const MASTER_EMAIL='she.master@dsm-tortuga.com';
@@ -1401,8 +1422,12 @@ function trackCloudWrite(promise){pendingCloudWrites++;return Promise.resolve(pr
 window.addEventListener('beforeunload',event=>{if(pendingCloudWrites>0){event.preventDefault();event.returnValue='Existem dados sendo salvos no Firebase. Aguarde a confirmação antes de atualizar.';return event.returnValue;}});
 function siteDocId(key){return encodeURIComponent(String(key)).replace(/\./g,'%2E')}
 function siteStatusError(err){console.error('Sincronização geral',err);setStatus('falha ao salvar dados do site: '+(err?.message||err),false)}
-async function saveSiteStateKey(key,value,deleted=false){
+let irisTimer=null,irisPending=null;
+function irisFlushNow(){if(!irisTimer)return;clearTimeout(irisTimer);const v=irisPending;irisPending=null;irisTimer=null;saveSiteStateKey('sheq_iris_data_v1',v,false,true).catch(siteStatusError)}
+window.addEventListener('pagehide',irisFlushNow);document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')irisFlushNow()});
+async function saveSiteStateKey(key,value,deleted=false,now=false){
  if(!db||!auth?.currentUser||applyingSiteRemote||SITE_EXCLUDED_KEYS.has(key))return false;
+ if(!deleted&&!now&&key==='sheq_iris_data_v1'){irisPending=String(value);clearTimeout(irisTimer);irisTimer=setTimeout(()=>{const v=irisPending;irisPending=null;irisTimer=null;saveSiteStateKey(key,v,false,true).then(()=>setStatus('Report IRIS salvo na nuvem',true)).catch(siteStatusError)},600);return true;}
  const refDoc=doc(db,SITE_STATE_COLLECTION,siteDocId(key));
  if(deleted){await setDoc(refDoc,{key,deleted:true,updatedAt:Date.now()},{merge:true});return true;}
  if(typeof value!=='string')value=String(value);
@@ -1434,7 +1459,7 @@ async function syncAllSiteState(){
  if(siteStateUnsubscribe)siteStateUnsubscribe();
  siteStateUnsubscribe=onSnapshot(collection(db,SITE_STATE_COLLECTION),(ss)=>{
   applyingSiteRemote=true;
-  try{ss.docChanges().forEach(change=>{const d=change.doc,x=d.data(),key=x.key||decodeURIComponent(d.id);if(SITE_EXCLUDED_KEYS.has(key))return;if(x.deleted){localStorage.removeItem(key);if(key==='sheq_iris_data_v1'&&window.sheApplyRemoteIris)window.sheApplyRemoteIris('{}');}else if(typeof x.value==='string'){if(localStorage.getItem(key)!==x.value)localStorage.setItem(key,x.value);if(key==='sheq_iris_data_v1'){localStorage.setItem('sheq_iris_local_updated_v1',String(x.updatedAt||Date.now()));if(window.sheApplyRemoteIris)window.sheApplyRemoteIris(x.value);}}})}
+  try{ss.docChanges().forEach(change=>{const d=change.doc,x=d.data(),key=x.key||decodeURIComponent(d.id);if(SITE_EXCLUDED_KEYS.has(key))return;if(x.deleted){localStorage.removeItem(key);if(key==='sheq_iris_data_v1'&&window.sheApplyRemoteIris)window.sheApplyRemoteIris('{}');}else if(typeof x.value==='string'){if(d.metadata.hasPendingWrites||localStorage.getItem(key)===x.value)return;if(key==='sheq_iris_data_v1'&&(irisTimer||Number(localStorage.getItem('sheq_iris_local_updated_v1')||0)>Number(x.updatedAt||0)))return;localStorage.setItem(key,x.value);if(key==='sheq_iris_data_v1'){localStorage.setItem('sheq_iris_local_updated_v1',String(x.updatedAt||Date.now()));if(window.sheApplyRemoteIris)window.sheApplyRemoteIris(x.value);}}})}
   finally{applyingSiteRemote=false}
   setStatus('dados gerais do site sincronizados',true);
  },siteStatusError);
@@ -1490,7 +1515,12 @@ async function syncInitial(){
 }
 async function migrateCertificatePdfs(){
  if(!window.data)return;let changed=false;
- for(const e of window.data){for(const c of (e.certs||[])){if(c.fileId&&!c.storagePath){try{const blob=await window.idbGet(c.fileId);if(blob){const meta=await window.sheFirebaseUploadCertificate(e.id,c.fileId,blob);Object.assign(c,meta);changed=true;}}catch(err){console.warn('Migração de PDF pendente',err)}}}}
+ for(const e of window.data){for(const c of (e.certs||[])){
+  const fl=(Array.isArray(c.files)&&c.files.length)?c.files:(c.fileId?[{fileId:c.fileId,fileName:c.fileName||c.nome,fileType:c.fileType||'application/pdf',storagePath:c.storagePath||'',fileUrl:c.fileUrl||'',chunks:c.chunks||0}]:[]);
+  for(const f of fl){if(f.fileId&&!f.storagePath){try{const blob=await window.idbGet(f.fileId);if(blob){const meta=await window.sheFirebaseUploadCertificate(e.id,f.fileId,blob);Object.assign(f,meta);changed=true;}}catch(err){console.warn('Migração de PDF pendente',err)}}}
+  if(fl.length&&!(Array.isArray(c.files)&&c.files.length)){c.files=fl;changed=true}
+  if(fl[0]&&fl[0].storagePath&&!c.storagePath){c.storagePath=fl[0].storagePath;c.fileUrl=fl[0].fileUrl||'';c.chunks=fl[0].chunks||0;changed=true}
+ }}
  if(changed&&window.persistData)window.persistData();
 }
 window.sheFirebaseSave=(records)=>{
@@ -1502,9 +1532,27 @@ window.sheFirebaseSave=(records)=>{
 window.sheFirebaseSaveMovementHistory=async(records)=>{if(!connected||!db||!auth?.currentUser)return;try{for(const item of records){const clean=JSON.parse(JSON.stringify(item));await setDoc(doc(db,'historico_equipamentos',String(item.id)),clean,{merge:true});}setStatus('histórico salvo no Firebase',true);return true;}catch(err){console.error('Histórico Firebase',err);setStatus('falha ao salvar histórico: '+err.message,false);throw err}};
 window.sheFirebaseUploadMovementEvidence=async(movementId,file)=>{if(!connected||!storage||!auth?.currentUser)throw new Error('Faça login no Firebase para sincronizar evidências.');const safe=file.name.replace(/[^a-zA-Z0-9._-]/g,'_');const path=`she-critico-historico/${movementId}/${Date.now()}-${safe}`;const target=ref(storage,path);await uploadBytes(target,file,{contentType:file.type||'application/octet-stream'});return{storagePath:path,url:await getDownloadURL(target)}};
 window.sheFirebaseUploadCertificate=async(equipmentId,fileId,file)=>{
- if(!connected||!storage||!auth?.currentUser)throw new Error('Faça login no Firebase antes de enviar PDFs.');
- const path=`she-critico-certificados/${equipmentId}/${fileId}-${(file.name||'certificado.pdf').replace(/[^a-zA-Z0-9._-]/g,'_')}`;
- const target=ref(storage,path);await uploadBytes(target,file,{contentType:file.type||'application/pdf'});const fileUrl=await getDownloadURL(target);return{storagePath:path,fileUrl};
+ if(!connected||!auth?.currentUser)throw new Error('Faça login no Firebase antes de enviar PDFs.');
+ if(storage){
+  try{
+   const path=`she-critico-certificados/${equipmentId}/${fileId}-${(file.name||'certificado.pdf').replace(/[^a-zA-Z0-9._-]/g,'_')}`;
+   const target=ref(storage,path);await uploadBytes(target,file,{contentType:file.type||'application/pdf'});const fileUrl=await getDownloadURL(target);return{storagePath:path,fileUrl,chunks:0};
+  }catch(err){console.warn('Storage indisponível, usando Firestore',err);}
+ }
+ // Alternativa sem Storage (plano Spark): grava o PDF em pedaços no Firestore.
+ if(file.size>8*1024*1024)throw new Error('PDF maior que 8 MB: reduza o arquivo ou ative o Firebase Storage.');
+ const dataUrl=await new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result);r.onerror=()=>rej(r.error);r.readAsDataURL(file)});
+ const b64=String(dataUrl).split(',')[1]||'';const SIZE=700000;const total=Math.max(1,Math.ceil(b64.length/SIZE));
+ for(let n=0;n<total;n++){await setDoc(doc(db,'certificados_arquivos',fileId+'__'+n),{fileId,n,total,type:file.type||'application/pdf',name:file.name||'certificado.pdf',data:b64.slice(n*SIZE,(n+1)*SIZE),updatedAt:Date.now()});}
+ return{storagePath:'firestore:'+fileId,fileUrl:'',chunks:total};
+};
+window.sheFirebaseDownloadCertificate=async(fileId,chunks)=>{
+ if(!db||!auth?.currentUser)throw new Error('Faça login no Firebase para baixar o PDF.');
+ const first=await getDoc(doc(db,'certificados_arquivos',fileId+'__0'));if(!first.exists())return null;
+ const total=Number(chunks)||first.data().total||1;const parts=[first.data().data];
+ for(let n=1;n<total;n++){const d=await getDoc(doc(db,'certificados_arquivos',fileId+'__'+n));if(!d.exists())throw new Error('PDF incompleto na nuvem.');parts.push(d.data().data);}
+ const bin=atob(parts.join(''));const arr=new Uint8Array(bin.length);for(let k=0;k<bin.length;k++)arr[k]=bin.charCodeAt(k);
+ return new Blob([arr],{type:first.data().type||'application/pdf'});
 };
 let syncing=null;
 function ensureSync(){
