@@ -381,6 +381,7 @@ table{color:#173b67!important}th{background:#edf5fa!important;color:#174a78!impo
   <div class="spacer"></div>
   <span id="sync" class="badge" style="background:#1a1a1a;color:#9a9a9a;border-color:#333">● Firebase: não conectado</span>
   <button class="btn ghost" onclick="exportXlsx()">⬇ Baixar Excel</button>
+  <button class="btn ghost" id="backupBtn" onclick="backupSite()" title="Baixa um backup completo do site (Excel + JSON)">💾 Backup do site</button>
   <button class="btn ghost logout-btn" onclick="logoutIRIS()">Sair</button>
 </header>
 <nav id="tabs">
@@ -449,7 +450,7 @@ table{color:#173b67!important}th{background:#edf5fa!important;color:#174a78!impo
 </section>
 
 <section id="import" hidden>
-  <div class="note">Base carregada da planilha <b>Equipamentos SHE.xlsx</b>. As abas SHE, QUA e SOB foram consolidadas no painel. Você também pode importar uma nova planilha para substituir/atualizar a base.</div>
+  <div class="note">Base carregada da planilha <b>Equipamentos SHE.xlsx</b>. As abas SHE, QUA e SOB foram consolidadas no painel. Você também pode importar uma planilha para <b>atualizar</b> a base: ela mostra um resumo antes de gravar e não apaga nada (certificados, PDFs e histórico são mantidos).</div>
   <label class="drop" style="display:block">
     <input type="file" id="xfile" accept=".xlsx,.xls,.csv" hidden>
     📄 Clique para escolher a planilha (.xlsx)
@@ -995,18 +996,149 @@ function toISO(v){
   m=s.match(/^\d{4}-\d{2}-\d{2}/);return m?m[0]:'';
 }
 const norm=s=>String(s).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim();
+function impGet(r,test){for(const k of Object.keys(r)){if(test(norm(k)))return r[k]}return''}
+function parseImportRow(r){
+  const g=(...ks)=>impGet(r,n=>ks.includes(n));
+  const hh=Number(String(g('hh atividade','hh','horas atividade','hh planejado')).replace(',','.'))||0;
+  return{nome:String(g('equipamento','descricao','nome')).trim(),floc:String(g('floc','local de instalacao')).trim(),
+    cat:String(g('categoria','cat')).toUpperCase().trim().slice(0,3),ult:toISO(g('ultima','ultima execucao')),prox:toISO(g('proxima','proxima execucao','vencimento')),
+    resp:String(g('responsavel')).trim(),forn:String(g('fornecedor')).trim(),plano:String(g('plano','plano sap','numero do plano','n plano')).trim(),
+    hhAtividade:hh,tipoAtividade:String(g('tipo atividade','disciplina')).trim(),evidenciaSAP:String(impGet(r,n=>n.startsWith('evidencia')||n==='om'||n==='certificado')).trim()};
+}
+const IMP_FIELDS=[['floc','FLOC'],['nome','Equipamento'],['ult','Última'],['prox','Próxima'],['resp','Responsável'],['forn','Fornecedor'],['plano','Plano SAP'],['hhAtividade','HH'],['tipoAtividade','Tipo atividade'],['evidenciaSAP','Evidência SAP']];
+const impW=v=>String(v??'').replace(/\s+/g,' ').trim();
+const impEv=v=>impW(String(v??'').replace(/_x000D_/g,' ').replace(/\s*\/\s*/g,' '));
+const impU=v=>impW(v).toUpperCase();
+function impPlan(e){return impW(e.plano||extractPlan(e.obs)||'')}
+function planMergeImport(incoming){
+  const used=new Set(),pairs=[];let rest=incoming.slice();
+  const passes=[
+    [x=>[x.cat,impU(x.floc),impW(x.plano),impU(x.nome)].join('|'),e=>[e.cat,impU(e.floc),impPlan(e),impU(e.nome)].join('|')],
+    [x=>[x.cat,impU(x.floc),impU(x.nome)].join('|'),e=>[e.cat,impU(e.floc),impU(e.nome)].join('|')],
+    [x=>[x.cat,impW(x.plano),impU(x.nome)].join('|'),e=>[e.cat,impPlan(e),impU(e.nome)].join('|')],
+    [x=>[x.cat,impU(x.floc),impW(x.plano)].join('|'),e=>[e.cat,impU(e.floc),impPlan(e)].join('|')]
+  ];
+  passes.forEach(([kx,ke],pi)=>{
+    const idx=new Map();data.forEach(e=>{if(used.has(e.id))return;const k=ke(e);(idx.get(k)||idx.set(k,[]).get(k)).push(e)});
+    const left=[];
+    rest.forEach(x=>{
+      if(pi===3&&!impW(x.plano)){left.push(x);return}
+      const list=idx.get(kx(x));const e=list&&list.find(y=>!used.has(y.id));
+      if(e){used.add(e.id);pairs.push({x,e})}else left.push(x);
+    });
+    rest=left;
+  });
+  const updates=[];const fieldCount={};let unchanged=0;
+  pairs.forEach(({x,e})=>{
+    const ch=[];
+    IMP_FIELDS.forEach(([f,label])=>{
+      let inc=x[f];if(inc===''||inc===0||inc==null)return;
+      if((f==='ult'||f==='prox')&&!/^\d{4}-\d{2}-\d{2}$/.test(inc))return;
+      if(f==='plano'&&!/\d/.test(inc))return;
+      const cur=f==='plano'?impPlan(e):e[f];
+      const same=f==='evidenciaSAP'?impEv(cur)===impEv(inc):f==='hhAtividade'?Number(cur||0)===Number(inc):impW(cur)===impW(inc);
+      if(!same){ch.push({f,label,from:cur??'',to:inc});fieldCount[label]=(fieldCount[label]||0)+1}
+    });
+    if(ch.length)updates.push({e,x,ch});else unchanged++;
+  });
+  const created=rest.filter(x=>x.nome&&['SHE','QUA','SOB'].includes(x.cat));
+  const skipped=rest.filter(x=>!(x.nome&&['SHE','QUA','SOB'].includes(x.cat)));
+  const notFound=data.filter(e=>!used.has(e.id));
+  return{updates,unchanged,fieldCount,created,skipped,notFound,matched:pairs.length};
+}
+function renderImportPreview(plan,fileName){
+  const li=a=>a.map(t=>'<li>'+escHtml(t)+'</li>').join('');
+  const fc=Object.entries(plan.fieldCount).map(([k,v])=>`${k}: ${v}`).join(' · ')||'nenhum campo';
+  const sample=plan.updates.slice(0,12).map(u=>`${u.e.cat} · ${u.e.floc||u.e.nome.slice(0,30)} — `+u.ch.map(c=>`${c.label}: ${c.from||'(vazio)'} → ${c.to}`).join('; '));
+  impMsg.innerHTML=`<div class="card" style="margin-top:14px;text-align:left"><h3 style="margin-top:0">Resumo da atualização — ${escHtml(fileName)}</h3>
+  <ul>
+   <li><b>${plan.matched}</b> equipamentos encontrados na base (${plan.updates.length} com alterações, ${plan.unchanged} já iguais)</li>
+   <li>Campos que serão atualizados: ${escHtml(fc)}</li>
+   <li><b>${plan.created.length}</b> equipamentos novos serão adicionados</li>
+   <li><b>${plan.notFound.length}</b> equipamentos da base não estão na planilha — <b>serão mantidos</b>, nada é apagado</li>
+   ${plan.skipped.length?`<li>${plan.skipped.length} linhas ignoradas (sem nome ou categoria SHE/QUA/SOB)</li>`:''}
+  </ul>
+  <p><b>Não serão alterados:</b> IDs, certificados, PDFs, ações corretivas, histórico e observações.</p>
+  ${sample.length?`<details><summary>Exemplos de alterações (${sample.length} de ${plan.updates.length})</summary><ul style="font-size:12px">${li(sample)}</ul></details>`:''}
+  ${plan.created.length?`<details><summary>Equipamentos novos</summary><ul style="font-size:12px">${li(plan.created.map(x=>`${x.cat} · ${x.floc||'sem FLOC'} · ${x.nome}`))}</ul></details>`:''}
+  ${plan.notFound.length?`<details><summary>Na base, mas fora da planilha (mantidos)</summary><ul style="font-size:12px">${li(plan.notFound.slice(0,60).map(e=>`${e.cat} · ${e.floc||'sem FLOC'} · ${e.nome}`))}${plan.notFound.length>60?'<li>…</li>':''}</ul></details>`:''}
+  <div style="display:flex;gap:10px;margin-top:12px"><button class="btn" type="button" onclick="applyImportPlan()">Aplicar atualização</button><button class="btn ghost" type="button" onclick="cancelImportPlan()">Cancelar</button></div></div>`;
+}
+let importPlan=null;
+function cancelImportPlan(){importPlan=null;impMsg.textContent='Atualização cancelada. Nada foi alterado.'}
+function applyImportPlan(){
+  const plan=importPlan;if(!plan)return;
+  if(!requireEquipmentPassword('atualizar a lista de'))return;
+  plan.updates.forEach(u=>{u.ch.forEach(c=>{u.e[c.f]=c.f==='hhAtividade'?Number(c.to):c.to})});
+  const nums={};data.forEach(e=>{const m=String(e.id).match(/^(SHE|QUA|SOB)-(\d+)$/);if(m)nums[m[1]]=Math.max(nums[m[1]]||0,Number(m[2]))});
+  plan.created.forEach(x=>{
+    nums[x.cat]=(nums[x.cat]||0)+1;
+    const created={id:`${x.cat}-${String(nums[x.cat]).padStart(4,'0')}`,certs:[],history:[],correctiveActions:[],nome:x.nome,floc:x.floc,cat:x.cat,ult:x.ult,prox:x.prox,estrategia:'',customMeses:'',resp:x.resp,forn:x.forn,plano:/\d/.test(x.plano)?x.plano:'',hhAtividade:x.hhAtividade||0,tipoAtividade:x.tipoAtividade,evidenciaSAP:x.evidenciaSAP,obs:''};
+    data.push(created);recordEquipmentMovement('Inclusão',created);
+  });
+  importPlan=null;persistData();render();
+  impMsg.innerHTML=`✅ Atualização aplicada: <b>${plan.updates.length}</b> equipamentos atualizados e <b>${plan.created.length}</b> adicionados. Nada foi apagado. Confira o selo do Firebase (verde = salvo na nuvem).`;
+}
 document.getElementById('xfile').addEventListener('change',async ev=>{
   const f=ev.target.files[0];if(!f)return;
-  if(!requireEquipmentPassword('importar/substituir a lista de')){ev.target.value='';return;}
-  const wb=XLSX.read(await f.arrayBuffer(),{type:'array'});
-  const rowsX=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{defval:''});
-  const get=(r,...ks)=>{for(const k of Object.keys(r))if(ks.includes(norm(k)))return r[k];return''};
-  const out=rowsX.map((r,i)=>({id:'EQ'+String(i+1).padStart(3,'0'),nome:String(get(r,'equipamento','descricao','nome')),floc:String(get(r,'floc','local de instalacao')),
-    cat:String(get(r,'categoria','cat','tipo')).toUpperCase().slice(0,3)||'SHE',ult:toISO(get(r,'ultima','ultima execucao')),prox:toISO(get(r,'proxima','proxima execucao','vencimento')),
-    resp:String(get(r,'responsavel')),forn:String(get(r,'fornecedor')),plano:String(get(r,'plano','plano sap','numero do plano','nº plano')),hhAtividade:Number(get(r,'hh atividade','hh','horas atividade','hh planejado'))||0,tipoAtividade:String(get(r,'tipo atividade','tipo','disciplina')).trim(),evidenciaSAP:String(get(r,'evidencia sap','evidencia','om','certificado')),obs:String(get(r,'observacoes','obs')),certs:[],history:[],correctiveActions:[]})).filter(e=>e.nome);
-  if(!out.length){impMsg.textContent='Nenhuma linha reconhecida. Confira os nomes das colunas.';return}
-  data=out;persistData();render();impMsg.innerHTML=`✅ ${out.length} equipamentos importados de <b>${f.name}</b>. Veja nas abas Painel e Equipamentos.`;
+  if(!requireEquipmentPassword('atualizar a lista de')){ev.target.value='';return;}
+  try{
+    const wb=XLSX.read(await f.arrayBuffer(),{type:'array'});
+    const rowsX=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{defval:''});
+    const incoming=rowsX.map(parseImportRow).filter(x=>x.nome);
+    if(!incoming.length){impMsg.textContent='Nenhuma linha reconhecida. Confira os nomes das colunas (Equipamento, FLOC, Categoria...).';ev.target.value='';return}
+    importPlan=planMergeImport(incoming);
+    renderImportPreview(importPlan,f.name);
+  }catch(err){console.error(err);impMsg.textContent='Erro ao ler a planilha: '+(err.message||err)}
+  ev.target.value='';
 });
+
+/* ===== BACKUP COMPLETO DO SITE (Excel + JSON) ===== */
+const BACKUP_KEY='sheq_last_backup_v1';
+function backupDownload(name,blob){const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},4000)}
+function backupSite(){
+  if(!requireEquipmentPassword('gerar o backup do'))return;
+  try{
+    const now=new Date(),stamp=now.toISOString().slice(0,10);
+    const clean=v=>JSON.parse(JSON.stringify(v));
+    const site={};for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(!k||['fbcfg','iris_remember_user'].includes(k))continue;try{site[k]=localStorage.getItem(k)}catch(e){}}
+    let budget={};try{budget=JSON.parse(localStorage.getItem('sheq_budget_v1')||'{}')}catch(e){}
+    const pack={app:'SHE Crítico — Gestão',versao:1,geradoEm:now.toISOString(),
+      resumo:{equipamentos:data.length,movimentacoes:equipmentMovements.length,certificados:data.reduce((n,e)=>n+(e.certs||[]).length,0)},
+      equipamentos:clean(data),movimentacoes:clean(equipmentMovements),iris:clean(irisStore),budget,dadosGerais:site,
+      aviso:'Os arquivos PDF dos certificados ficam no Firebase; este backup guarda os dados e os nomes dos arquivos, não o conteúdo dos PDFs.'};
+    backupDownload(`BACKUP_SHE_Critico_${stamp}.json`,new Blob([JSON.stringify(pack,null,1)],{type:'application/json'}));
+    if(window.XLSX){
+      const wb=XLSX.utils.book_new();
+      const add=(name,rows)=>XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(rows.length?rows:[{'(vazio)':''}]),name);
+      add('Equipamentos',data.map(e=>({ID:e.id,Equipamento:e.nome,FLOC:e.floc,Categoria:e.cat,'Última':e.ult,'Próxima':e.prox,'Responsável':e.resp,Fornecedor:e.forn,'Plano SAP':e.plano||extractPlan(e.obs)||'','HH atividade':Number(e.hhAtividade)||0,'Tipo atividade':e.tipoAtividade||'','Evidência SAP':e.evidenciaSAP||'',Estratégia:e.estrategia||'',Observações:e.obs||''})));
+      add('Certificados',data.flatMap(e=>(e.certs||[]).map(c=>({ID:e.id,Equipamento:e.nome,FLOC:e.floc,Categoria:e.cat,Certificado:c.nome||'','Calibração':c.cal||'',Vencimento:c.val||'','Validade (meses)':c.meses||'',Fornecedor:c.fornecedor||'','Assinado Engenharia':c.assinadoEngenharia===true?'SIM':'NÃO',Arquivos:(typeof certFiles==='function'?certFiles(c):[]).map(f=>f.fileName).join(' | '),Observação:c.obs||''}))));
+      add('Ações corretivas',data.flatMap(e=>(e.correctiveActions||[]).map(a=>({ID:e.id,Equipamento:e.nome,FLOC:e.floc,Ação:a.text||'',Status:a.status||'',Criada:a.createdAt||'',Atualizada:a.updatedAt||''}))));
+      add('Histórico movimentações',equipmentMovements.map(m=>({Data:m.at||'',Movimentação:m.type||'',Equipamento:m.nome||'',FLOC:m.floc||'',Categoria:m.cat||'',Evidências:(m.evidences||[]).map(x=>x.name).join(' | ')})));
+      add('Histórico por equipamento',data.flatMap(e=>(e.history||[]).map(h=>({ID:e.id,Equipamento:e.nome,Data:h.at||'',Ação:h.action||'',Detalhe:h.detail||''}))));
+      const iris=[];Object.keys(irisStore).forEach(y=>['SHE','QUA','SOB'].forEach(cat=>(irisStore[y][cat]||[]).forEach((r,i)=>{if([r.p,r.nm,r.na,r.r,r.a].some(v=>v!==''&&v!=null))iris.push({Ano:y,Categoria:cat,'Mês':irisMonths[i],Programado:r.p,'Não realizado no mês':r.nm,'Não realizado até o mês':r.na,Realizado:r.r,'Aderência %':r.a})})));
+      add('Report IRIS',iris);
+      const bud=[];Object.keys(budget).forEach(y=>(budget[y]||[]).forEach(m=>(m.demands||[]).forEach(d=>bud.push({Ano:y,'Mês':m.month,Categoria:d.category,Demanda:d.name,Fornecedor:d.supplier,'Orçamento (R$)':d.planned,'Realizado (R$)':d.actual||0,'Saving (R$)':d.saving||0,Justificativa:d.savingReason||'',Status:d.completed?'Concluído':'Pendente'}))));
+      add('BUDGET',bud);
+      setTimeout(()=>XLSX.writeFile(wb,`BACKUP_SHE_Critico_${stamp}.xlsx`),700);
+    }
+    localStorage.setItem(BACKUP_KEY,now.toISOString());
+    backupLabel();
+    toast('Backup gerado: Excel + JSON. Guarde os arquivos em local seguro.');
+  }catch(err){console.error(err);toast('Erro ao gerar backup: '+(err.message||err))}
+}
+function backupLabel(){
+  const b=document.getElementById('backupBtn');if(!b)return;
+  const v=localStorage.getItem(BACKUP_KEY);
+  b.title=v?('Último backup: '+new Date(v).toLocaleDateString('pt-BR')+' — gere um novo todo mês'):'Ainda não foi feito nenhum backup — gere um agora';
+}
+function backupReminder(){
+  backupLabel();
+  if(sessionStorage.getItem('iris_auth')!=='1')return;
+  const v=localStorage.getItem(BACKUP_KEY);const dias=v?(Date.now()-new Date(v).getTime())/864e5:Infinity;
+  if(dias>30){const e=document.getElementById('toast');if(e){e.textContent=v?`Faz ${Math.floor(dias)} dias do último backup. Clique em "💾 Backup do site".`:'Nenhum backup feito ainda. Clique em "💾 Backup do site".';e.style.display='block';clearTimeout(e._t);e._t=setTimeout(()=>e.style.display='none',6000)}}
+}
+setTimeout(backupReminder,6000);
 function exportXlsx(){
   const ws=XLSX.utils.json_to_sheet(data.map(e=>({Equipamento:e.nome,FLOC:e.floc,Categoria:e.cat,'Última':e.ult,'Próxima':e.prox,'Responsável':e.resp,Fornecedor:e.forn,'Plano SAP':e.plano||extractPlan(e.obs),'HH atividade':Number(e.hhAtividade)||0,'Tipo atividade':e.tipoAtividade||'','Evidência SAP (OM / Cert.)':e.evidenciaSAP||'',Estratégia:e.estrategia==='custom'?`Personalizada (${e.customMeses} meses)`:({'1':'Mensal','2':'Bimestral','3':'Trimestral','4':'Quadrimestral','6':'Semestral','12':'Anual'}[e.estrategia]||''),Status:status(e),'Observações':e.obs})));
   const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'SHE Crítico');XLSX.writeFile(wb,'SHE_Critico.xlsx');
