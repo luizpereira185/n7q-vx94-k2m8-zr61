@@ -333,6 +333,7 @@ table{color:#173b67!important}th{background:#edf5fa!important;color:#174a78!impo
 .eq-detail-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:10px}
 @media(max-width:800px){.eq-detail-grid{grid-template-columns:1fr}}
 
+.cert-arrow{border:1px solid #cbd8e3;background:#fff;color:#17324d;border-radius:8px;width:34px;height:34px;font-size:16px;cursor:pointer;flex:0 0 auto}.cert-eq.collapsed .cert-items,.cert-eq.collapsed .cert-history{display:none!important}
 </style>
 </head>
 <body>
@@ -430,7 +431,7 @@ table{color:#173b67!important}th{background:#edf5fa!important;color:#174a78!impo
   <div class="cert-tools">
     <input id="certQ" placeholder="Buscar certificado, equipamento, FLOC, fornecedor…">
     <select id="certCat"><option value="">Todas categorias</option><option>SHE</option><option>QUA</option><option>SOB</option></select>
-    <select id="certYear"><option value="">Todos os anos</option></select><span class="muted" style="font-size:11px;align-self:center">Inclui relatórios de 2025</span>
+    <select id="certYear"><option value="">Todos os anos</option></select><span class="muted" style="font-size:11px;align-self:center">Inclui relatórios de 2025</span><button class="btn ghost" type="button" onclick="certCollapseAll(true)">▸ Recolher todos</button><button class="btn ghost" type="button" onclick="certCollapseAll(false)">▾ Expandir todos</button>
     <select id="certStatus"><option value="">Todos status</option><option>Vencido</option><option>A vencer</option><option>Em dia</option><option>Sem certificado</option></select>
     <select id="certCoverage"><option value="">Todos os controles</option><option value="faltando">Faltando certificado</option><option value="completo">Completo</option><option value="naoaplicavel">Periodicidade não definida</option><option value="assinatura">Pendente assinatura Engenharia</option></select>
     <button class="btn" type="button" onclick="openNewCertM()">+ Novo certificado</button>
@@ -532,8 +533,8 @@ table{color:#173b67!important}th{background:#edf5fa!important;color:#174a78!impo
   <div class="grid3" id="budgetKpis"></div>
   <div class="iris-card" style="margin-top:18px">
     <h3 id="budgetChartTitle">Orçamento × Realizado × Saving por mês — 2027 <span>R$</span></h3>
-    <canvas id="budgetChart" class="iris-canvas" style="height:430px"></canvas>
-    <div class="legend"><span><i style="background:#ffc400"></i>Orçamento</span><span><i style="background:#4ea1ff"></i>Realizado</span><span><i style="background:#2e9e5b"></i>Saving</span></div>
+    <div style="margin:6px 0"><label style="font-size:12px">Gráfico: <select id="budgetChartType" onchange="budgetSetChartType(this.value)"><option value="bars">Colunas</option><option value="lines">Linhas</option></select></label> <span class="muted" style="font-size:11px">Ao filtrar um mês, o gráfico mostra só aquele mês.</span></div><canvas id="budgetChart" class="iris-canvas" style="height:460px"></canvas>
+    <div class="legend"><span><i style="background:#f39a20"></i>Orçamento</span><span><i style="background:#087fbd"></i>Realizado</span><span><i style="background:#13a66b"></i>Saving</span></div>
   </div>
   <div class="sec">Acompanhamento mensal</div>
   <div class="tablewrap"><table><thead><tr><th>Mês</th><th>Orçamento (R$)</th><th>Realizado (R$)</th><th>Saving (R$)</th><th>Justificativa do saving</th><th>Saldo orçamento (R$)</th><th>Realizado %</th><th>Status</th></tr></thead><tbody id="budgetRows"></tbody></table></div>
@@ -716,7 +717,12 @@ function frequencyKey(e){
 function expectedCerts(e){const k=frequencyKey(e);return k?freqExpectedPerYear[k]:null}
 function frequencyLabel(e){const k=frequencyKey(e);return k?strategyLabel(k):'Periodicidade não definida'}
 function certYearOf(c){return c?.cal?new Date(c.cal+'T00:00:00').getFullYear():(c?.val?new Date(c.val+'T00:00:00').getFullYear():'')}
-function certMatchesYear(c,year){if(!year)return true;const y=String(year);return String(c?.cal||'').slice(0,4)===y||String(c?.val||'').slice(0,4)===y}
+function certMatchesYear(c,year){
+  if(!year)return true;const y=Number(year);
+  const cy=Number(String(c?.cal||'').slice(0,4))||0,vy=Number(String(c?.val||'').slice(0,4))||0;
+  if(cy&&vy)return cy<=y&&y<=vy;
+  return (cy||vy)===y;
+}
 function certStatusFrom(c){if(!c||!c.val)return'Sem certificado';const d=days(c.val);return d<0?'Vencido':d<=30?'A vencer':'Em dia'}
 function certStatus(e){const cs=Array.isArray(e.certs)?e.certs:[];return cs.length?certStatusFrom(cs.slice().sort((a,b)=>(b.val||'').localeCompare(a.val||''))[0]):'Sem certificado'}
 function certsForYear(e,year){const cs=Array.isArray(e.certs)?e.certs:[];return year?cs.filter(c=>certMatchesYear(c,year)):cs}
@@ -869,9 +875,12 @@ function certs(){
     const cs=certsForYear(e,year).slice().sort((a,b)=>(a.val||'9999').localeCompare(b.val||''));
     const cv=coverage(e,y); const covText=cv.expected===null?'Periodicidade não definida':`${cv.count}/${cv.expected} certificados em ${y}`;
     const emptyMsg='<div class="cert-empty">Nenhum certificado cadastrado para este equipamento em '+y+'. '+(cv.expected!==null?('Faltam '+cv.missing+' de '+cv.expected+'.'):'')+'</div>';
-    return '<div class="cert-eq"><div class="cert-eq-head"><span class="tag" style="background:'+COL[e.cat]+'">'+e.cat+'</span><div class="info"><b>'+escHtml(e.nome)+'</b><br><small>'+escHtml(e.floc||'')+' · '+escHtml(e.forn||'Sem fornecedor')+' · <strong>'+escHtml(covText)+'</strong></small></div><button class="btn ghost" type="button" onclick="toggleCertHistory(\''+e.id+'\')">⌄ Histórico / Ações corretivas</button><button class="btn cert-add" onclick="openCertM(\''+e.id+'\')">+ Adicionar certificado</button></div><div class="cert-items">'+(cs.length?cs.map((c,i)=>renderCertItem(e,c,i)).join(''):emptyMsg)+'</div><div class="cert-history" id="cert-history-'+e.id+'" hidden><h4>Histórico de movimentações e alterações</h4><div class="eq-history-list">'+historyHtml(e)+'</div><h4 style="margin-top:12px">Ações corretivas / subtópicos</h4><div class="eq-action-form"><input id="cert-action-input-'+e.id+'" placeholder="Descreva uma ação corretiva ou subtópico..." onkeydown="if(event.key===\'Enter\')addCertCorrectiveAction(\''+e.id+'\')"><button class="btn" type="button" onclick="addCertCorrectiveAction(\''+e.id+'\')">＋ Adicionar ação</button></div><div class="eq-action-list">'+((e.correctiveActions||[]).length?(e.correctiveActions||[]).map(a=>'<div class="eq-action-item '+(a.status==='Concluída'?'done':'')+'"><input type="checkbox" '+(a.status==='Concluída'?'checked':'')+' onchange="toggleCertCorrectiveAction(\''+e.id+'\',\''+a.id+'\',this.checked)" title="Marcar como concluída"><div class="action-text">'+escHtml(a.text)+'<small>'+escHtml(a.status||'Em andamento')+' · '+(a.createdAt?new Date(a.createdAt).toLocaleDateString('pt-BR'):'')+'</small></div><button class="btn ghost eq-delete-btn" type="button" onclick="deleteCertCorrectiveAction(\''+e.id+'\',\''+a.id+'\')">Excluir</button></div>').join(''):'<div class="eq-action-item">Nenhuma ação corretiva cadastrada.</div>')+'</div></div></div>';
+    const isCol=certCollapsed.has(e.id);return '<div class="cert-eq'+(isCol?' collapsed':'')+'" id="cert-eq-'+e.id+'"><div class="cert-eq-head"><button type="button" class="cert-arrow" title="Recolher / expandir" onclick="toggleCertEq(\''+e.id+'\')">'+(isCol?'▸':'▾')+'</button><span class="tag" style="background:'+COL[e.cat]+'">'+e.cat+'</span><div class="info"><b>'+escHtml(e.nome)+'</b><br><small>'+escHtml(e.floc||'')+' · '+escHtml(e.forn||'Sem fornecedor')+' · <strong>'+escHtml(covText)+'</strong></small></div><button class="btn ghost" type="button" onclick="toggleCertHistory(\''+e.id+'\')">⌄ Histórico / Ações corretivas</button><button class="btn cert-add" onclick="openCertM(\''+e.id+'\')">+ Adicionar certificado</button></div><div class="cert-items">'+(cs.length?cs.map(c=>renderCertItem(e,c,(e.certs||[]).indexOf(c))).join(''):emptyMsg)+'</div><div class="cert-history" id="cert-history-'+e.id+'" hidden><h4>Histórico de movimentações e alterações</h4><div class="eq-history-list">'+historyHtml(e)+'</div><h4 style="margin-top:12px">Ações corretivas / subtópicos</h4><div class="eq-action-form"><input id="cert-action-input-'+e.id+'" placeholder="Descreva uma ação corretiva ou subtópico..." onkeydown="if(event.key===\'Enter\')addCertCorrectiveAction(\''+e.id+'\')"><button class="btn" type="button" onclick="addCertCorrectiveAction(\''+e.id+'\')">＋ Adicionar ação</button></div><div class="eq-action-list">'+((e.correctiveActions||[]).length?(e.correctiveActions||[]).map(a=>'<div class="eq-action-item '+(a.status==='Concluída'?'done':'')+'"><input type="checkbox" '+(a.status==='Concluída'?'checked':'')+' onchange="toggleCertCorrectiveAction(\''+e.id+'\',\''+a.id+'\',this.checked)" title="Marcar como concluída"><div class="action-text">'+escHtml(a.text)+'<small>'+escHtml(a.status||'Em andamento')+' · '+(a.createdAt?new Date(a.createdAt).toLocaleDateString('pt-BR'):'')+'</small></div><button class="btn ghost eq-delete-btn" type="button" onclick="deleteCertCorrectiveAction(\''+e.id+'\',\''+a.id+'\')">Excluir</button></div>').join(''):'<div class="eq-action-item">Nenhuma ação corretiva cadastrada.</div>')+'</div></div></div>';
   }).join('')||'<div style="color:var(--mut);padding:10px">Nenhum equipamento encontrado.</div>';
 }
+const certCollapsed=new Set();
+function toggleCertEq(id){const el=document.getElementById('cert-eq-'+id);if(!el)return;const col=!el.classList.contains('collapsed');el.classList.toggle('collapsed',col);if(col)certCollapsed.add(id);else certCollapsed.delete(id);const b=el.querySelector('.cert-arrow');if(b)b.textContent=col?'▸':'▾'}
+function certCollapseAll(col){document.querySelectorAll('#certList .cert-eq').forEach(el=>{const id=el.id.replace('cert-eq-','');el.classList.toggle('collapsed',col);if(col)certCollapsed.add(id);else certCollapsed.delete(id);const b=el.querySelector('.cert-arrow');if(b)b.textContent=col?'▸':'▾'})}
 function toggleCertHistory(id){const el=document.getElementById('cert-history-'+id);if(el)el.hidden=!el.hidden}
 function addCertCorrectiveAction(id){
   const e=data.find(x=>x.id===id);if(!e)return;
@@ -1167,7 +1176,7 @@ function irisFillDemo(){
   ['SHE','QUA','SOB'].forEach(cat=>demo[cat].forEach((p,i)=>{
     const r=irisData[cat][i];r.p=p;r.nm=p?Math.max(0,Math.round(p*(i<2?.01:.003))):'';r.na=r.nm===''?'':(i?numI(irisData[cat][i-1].na)+numI(r.nm):numI(r.nm));r.r=p?Math.max(0,p-numI(r.nm)):'';r.a=p?((numI(r.r)/p)*100).toFixed(2):'';
   }));
-  renderIRIS();document.getElementById('irisStatus').textContent='Exemplo preenchido. Substitua pelos seus números.';
+  persistIris();renderIRIS();document.getElementById('irisStatus').textContent='Exemplo preenchido. Substitua pelos seus números.';
 }
 function irisClear(){
   ['SHE','QUA','SOB'].forEach(cat=>irisData[cat].forEach(r=>Object.assign(r,{p:'',nm:'',na:'',r:'',a:''})));
@@ -1276,7 +1285,6 @@ function checkIRISAuth(){
 document.addEventListener("DOMContentLoaded",checkIRISAuth);
 function budgetDemandEdit(mi,id,k,v){const d=budgetData[mi].demands.find(x=>String(x.id)===String(id));if(!d)return;d[k]=k==='savingReason'?String(v):Math.max(0,Number(v)||0);budgetSave();budgetRender();}
 function budgetEdit(i,k,v){budgetData[i][k]=k==='savingReason'?String(v):Math.max(0,Number(v)||0);budgetSave();budgetRender();}
-function budgetDrawChart(){const canvas=document.getElementById('budgetChart');if(!canvas)return;const rect=canvas.getBoundingClientRect(),dpr=window.devicePixelRatio||1;canvas.width=Math.max(320,rect.width)*dpr;canvas.height=Math.max(280,rect.height)*dpr;const ctx=canvas.getContext('2d');ctx.setTransform(dpr,0,0,dpr,0,0);const W=canvas.width/dpr,H=canvas.height/dpr;ctx.fillStyle='#ffffff';ctx.fillRect(0,0,W,H);const pad={l:78,r:24,t:30,b:70},pw=W-pad.l-pad.r,ph=H-pad.t-pad.b;const vals=budgetData.map(x=>({planned:x.planned,actual:x.completed?(Number(x.actual)||x.demands.reduce((s,d)=>s+(d.completed?(Number(d.actual)||Number(d.planned)||0):0),0)):0,saving:Number(x.saving||0)+x.demands.reduce((s,d)=>s+(Number(d.saving)||0),0)}));const maxV=Math.max(1,...vals.flatMap(x=>[x.planned,x.actual,x.saving]))*1.15;ctx.font='11px system-ui';ctx.textAlign='right';ctx.textBaseline='middle';for(let i=0;i<=5;i++){let y=pad.t+ph*i/5;ctx.strokeStyle='#e3ebf2';ctx.beginPath();ctx.moveTo(pad.l,y);ctx.lineTo(W-pad.r,y);ctx.stroke();ctx.fillStyle='#526a7b';ctx.fillText((maxV*(1-i/5)).toLocaleString('pt-BR',{notation:'compact',maximumFractionDigits:1}),pad.l-10,y);}[['planned','#f39a20'],['actual','#087fbd'],['saving','#13a66b']].forEach(([key,color])=>{ctx.strokeStyle=color;ctx.fillStyle=color;ctx.lineWidth=2.5;ctx.beginPath();vals.forEach((x,i)=>{let px=pad.l+i*pw/11,py=pad.t+ph-(Number(x[key])||0)/maxV*ph;if(i===0)ctx.moveTo(px,py);else ctx.lineTo(px,py);});ctx.stroke();vals.forEach((x,i)=>{let px=pad.l+i*pw/11,py=pad.t+ph-(Number(x[key])||0)/maxV*ph;ctx.beginPath();ctx.arc(px,py,3.5,0,Math.PI*2);ctx.fill();});});ctx.fillStyle='#526a7b';ctx.textAlign='center';ctx.textBaseline='top';ctx.font='11px system-ui';budgetData.forEach((x,i)=>{let px=pad.l+i*pw/11;ctx.fillText(x.month.split('/')[0]+(x.demands.some(d=>d.completed)?' ✓':''),px,H-pad.b+14);});}
 function budgetResetActual(){if(!confirm(`Limpar realizados, savings e conclusões de ${budgetYear}?`))return;budgetData=budgetData.map(x=>({...x,actual:0,saving:0,savingReason:'',completed:false,demands:x.demands.map(d=>({...d,actual:0,saving:0,savingReason:'',completed:false}))}));budgetSave();budgetRender();}
 function budgetExport(){if(!window.XLSX){alert('Biblioteca Excel não carregada.');return;}const rows=[['Ano','Mês','Categoria','Demanda','Fornecedor','Orçamento (R$)','Realizado (R$)','Saving (R$)','Justificativa','Status'],...budgetData.flatMap(x=>x.demands.map(d=>[budgetYear,x.month,d.category,d.name,d.supplier,d.planned,d.actual||0,d.saving||0,d.savingReason||'',d.completed?'Concluído':'Pendente']))];const book=XLSX.utils.book_new(),sheet=XLSX.utils.aoa_to_sheet(rows);XLSX.utils.book_append_sheet(book,sheet,`BUDGET ${budgetYear}`);XLSX.writeFile(book,`BUDGET_SHE_CRITICO_${budgetYear}.xlsx`);}
 /* ===== BUDGET: módulo completo (dados, render, ano/mês, cadastro e importação) ===== */
@@ -1322,7 +1330,7 @@ function budgetRender(){
     `<div class="card"><small>Saving</small><h2>${budgetFmt(saving)}</h2></div>`+
     `<div class="card"><small>Saldo do orçamento</small><h2>${budgetFmt(planned-actual)}</h2></div>`+
     `<div class="card"><small>Demandas concluídas</small><h2>${nc} / ${nd}</h2></div>`;
-  const ct=document.getElementById('budgetChartTitle');if(ct)ct.innerHTML=`Orçamento × Realizado × Saving por mês — ${budgetYear} <span>R$</span>`;
+  const ct=document.getElementById('budgetChartTitle');if(ct)ct.innerHTML=budgetMonth!=='all'?`Orçamento × Realizado × Saving — ${BUDGET_MONTHS[Number(budgetMonth)]}/${budgetYear} <span>R$</span>`:`Orçamento × Realizado × Saving por mês — ${budgetYear} <span>R$</span>`;
   document.getElementById('budgetRows').innerHTML=budgetData.map((x,i)=>{
     const t=T[i],pct=t.planned?(t.actual/t.planned*100):0,hasD=x.demands.length>0;
     const st=hasD?(x.demands.every(d=>d.completed)?'Concluído':x.demands.some(d=>d.completed)?'Parcial':'Pendente'):'—';
@@ -1350,7 +1358,7 @@ function budgetRender(){
   budgetDrawChart();
 }
 function budgetChangeYear(){budgetYear=Number(document.getElementById('budgetYear').value)||budgetYear;const y=document.getElementById('newBudgetDemandYear');if(y)y.value=String(budgetYear);budgetRender();}
-function budgetChangeMonth(){budgetMonth=document.getElementById('budgetMonthFilter').value;budgetRender();}
+function budgetChangeMonth(){budgetMonth=document.getElementById('budgetMonthFilter').value;budgetRender();const ct=document.getElementById('budgetChartTitle');if(ct&&budgetMonth!=='all')ct.innerHTML=`Orçamento × Realizado × Saving — ${BUDGET_MONTHS[Number(budgetMonth)]}/${budgetYear} <span>R$</span>`;}
 function budgetSetDemandYear(){}
 function budgetToggleDemand(mi,id,v){const d=budgetData[mi].demands.find(x=>String(x.id)===String(id));if(!d)return;d.completed=!!v;if(v&&!Number(d.actual))d.actual=Number(d.planned)||0;budgetSave();budgetRender();}
 function budgetDeleteDemand(mi,id){if(!confirm('Excluir esta demanda?'))return;budgetData[mi].demands=budgetData[mi].demands.filter(x=>String(x.id)!==String(id));budgetSave();budgetRender();}
@@ -1364,6 +1372,44 @@ function budgetAddDemand(){
   g('newBudgetDemandName').value='';g('newBudgetDemandSupplier').value='';g('newBudgetDemandPlanned').value='';
   budgetYear=y;budgetRender();
 }
+
+let budgetChartType='bars';
+function budgetChartFmt(v){v=Number(v)||0;return v>=1e6?(v/1e6).toLocaleString('pt-BR',{maximumFractionDigits:2})+' mi':v>=1e3?(v/1e3).toLocaleString('pt-BR',{maximumFractionDigits:1})+' mil':Math.round(v).toLocaleString('pt-BR')}
+function budgetDrawChart(){
+  const canvas=document.getElementById('budgetChart');if(!canvas)return;
+  const rect=canvas.getBoundingClientRect(),dpr=window.devicePixelRatio||1;
+  canvas.width=Math.max(320,rect.width)*dpr;canvas.height=Math.max(280,rect.height)*dpr;
+  const ctx=canvas.getContext('2d');ctx.setTransform(dpr,0,0,dpr,0,0);
+  const W=canvas.width/dpr,H=canvas.height/dpr;ctx.fillStyle='#ffffff';ctx.fillRect(0,0,W,H);
+  const focus=budgetMonth!=='all'&&budgetMonth!==undefined&&budgetMonth!=='';
+  const idx=focus?[Number(budgetMonth)]:budgetData.map((_,i)=>i);
+  const T=budgetData.map(budgetMonthTotals);
+  const labels=idx.map(i=>focus?BUDGET_MONTHS[i]+'/'+budgetYear:budgetData[i].month.split('/')[0]+(budgetData[i].demands.some(d=>d.completed)?' ✓':''));
+  const series=[['planned','Orçamento','#f39a20'],['actual','Realizado','#087fbd'],['saving','Saving','#13a66b']];
+  const pad={l:70,r:20,t:focus?58:74,b:46},pw=W-pad.l-pad.r,ph=H-pad.t-pad.b;
+  const maxV=Math.max(1,...idx.flatMap(i=>series.map(s=>T[i][s[0]])))*1.08;
+  ctx.font='11px system-ui';ctx.textAlign='right';ctx.textBaseline='middle';
+  for(let g=0;g<=5;g++){const y=pad.t+ph*g/5;ctx.strokeStyle='#e3ebf2';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(pad.l,y);ctx.lineTo(W-pad.r,y);ctx.stroke();ctx.fillStyle='#526a7b';ctx.fillText(budgetChartFmt(maxV*(1-g/5)),pad.l-8,y);}
+  const n=idx.length,gwid=pw/n,yOf=v=>pad.t+ph-(Number(v)||0)/maxV*ph;
+  // legenda
+  ctx.textAlign='left';ctx.textBaseline='middle';ctx.font='12px system-ui';let lx=pad.l;
+  series.forEach(([k,name,col])=>{ctx.fillStyle=col;ctx.fillRect(lx,12,12,12);ctx.fillStyle='#17324d';ctx.fillText(name,lx+18,18);lx+=ctx.measureText(name).width+44;});
+  if(budgetChartType==='lines'&&!focus){
+    series.forEach(([k,name,col])=>{ctx.strokeStyle=col;ctx.fillStyle=col;ctx.lineWidth=2.5;ctx.beginPath();idx.forEach((mi,j)=>{const x=pad.l+gwid*j+gwid/2,y=yOf(T[mi][k]);if(j===0)ctx.moveTo(x,y);else ctx.lineTo(x,y);});ctx.stroke();
+      idx.forEach((mi,j)=>{const x=pad.l+gwid*j+gwid/2,y=yOf(T[mi][k]);ctx.beginPath();ctx.arc(x,y,3.5,0,Math.PI*2);ctx.fill();const v=T[mi][k];if(v>0){ctx.save();ctx.translate(x,y-8);ctx.rotate(-Math.PI/2);ctx.textAlign='left';ctx.textBaseline='middle';ctx.font='bold 10px system-ui';ctx.fillText(budgetChartFmt(v),0,0);ctx.restore();}});});
+  } else {
+    const bw=Math.min(focus?120:46,gwid*0.8/3);
+    idx.forEach((mi,j)=>{const cx=pad.l+gwid*j+gwid/2;
+      series.forEach(([k,name,col],si)=>{const v=T[mi][k],x=cx+(si-1)*bw-bw/2,y=yOf(v);ctx.fillStyle=col;ctx.fillRect(x,y,bw-2,pad.t+ph-y);
+        if(v>0){ctx.fillStyle='#17324d';if(focus){ctx.textAlign='center';ctx.textBaseline='bottom';ctx.font='bold 13px system-ui';ctx.fillText(budgetFmt(v),x+(bw-2)/2,y-6);}
+          else{ctx.save();ctx.translate(x+(bw-2)/2,y-6);ctx.rotate(-Math.PI/2);ctx.textAlign='left';ctx.textBaseline='middle';ctx.font='bold 10px system-ui';ctx.fillText(budgetChartFmt(v),0,0);ctx.restore();}}
+      });
+    });
+  }
+  ctx.fillStyle='#526a7b';ctx.textAlign='center';ctx.textBaseline='top';ctx.font=(focus?'bold 14px':'11px')+' system-ui';
+  idx.forEach((mi,j)=>ctx.fillText(labels[j],pad.l+gwid*j+gwid/2,H-pad.b+14));
+}
+function budgetSetChartType(v){budgetChartType=v;budgetDrawChart()}
 /* ---- Importação da planilha BU ---- */
 function budgetNorm(s){return String(s??'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().replace(/[^a-z0-9]/g,'');}
 function budgetNum(v){if(typeof v==='number')return v;let s=String(v??'').replace(/[R$\s]/g,'');if(!s)return 0;if(s.includes(',')){s=s.replace(/\./g,'').replace(',','.');}const n=Number(s);return isFinite(n)?n:0;}
@@ -1444,16 +1490,17 @@ window.addEventListener('beforeunload',event=>{if(pendingCloudWrites>0){event.pr
 function siteDocId(key){return encodeURIComponent(String(key)).replace(/\./g,'%2E')}
 function siteStatusError(err){console.error('Sincronização geral',err);setStatus('falha ao salvar dados do site: '+(err?.message||err),false)}
 let irisTimer=null,irisPending=null;
-function irisFlushNow(){if(!irisTimer)return;clearTimeout(irisTimer);const v=irisPending;irisPending=null;irisTimer=null;saveSiteStateKey('sheq_iris_data_v1',v,false,true).catch(siteStatusError)}
+function irisFlushNow(){if(!irisTimer)return;pendingCloudWrites=Math.max(0,pendingCloudWrites-1);clearTimeout(irisTimer);const v=irisPending;irisPending=null;irisTimer=null;saveSiteStateKey('sheq_iris_data_v1',v,false,true).catch(siteStatusError)}
 window.addEventListener('pagehide',irisFlushNow);document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')irisFlushNow()});
 async function saveSiteStateKey(key,value,deleted=false,now=false){
  if(!db||!auth?.currentUser||applyingSiteRemote||SITE_EXCLUDED_KEYS.has(key))return false;
- if(!deleted&&!now&&key==='sheq_iris_data_v1'){irisPending=String(value);clearTimeout(irisTimer);irisTimer=setTimeout(()=>{const v=irisPending;irisPending=null;irisTimer=null;saveSiteStateKey(key,v,false,true).then(()=>setStatus('Report IRIS salvo na nuvem',true)).catch(siteStatusError)},600);return true;}
+ if(!deleted&&!now&&key==='sheq_iris_data_v1'){if(!irisTimer)pendingCloudWrites++;irisPending=String(value);clearTimeout(irisTimer);irisTimer=setTimeout(()=>{pendingCloudWrites=Math.max(0,pendingCloudWrites-1);const v=irisPending;irisPending=null;irisTimer=null;saveSiteStateKey(key,v,false,true).then(()=>setStatus('Report IRIS salvo na nuvem',true)).catch(siteStatusError)},600);return true;}
  const refDoc=doc(db,SITE_STATE_COLLECTION,siteDocId(key));
  if(deleted){await setDoc(refDoc,{key,deleted:true,updatedAt:Date.now()},{merge:true});return true;}
  if(typeof value!=='string')value=String(value);
  if(value.length>850000)throw new Error('O campo '+key+' excede o limite seguro do Firestore. Anexos devem ser enviados ao Storage.');
- await setDoc(refDoc,{key,value,deleted:false,updatedAt:Date.now()},{merge:true});return true;
+ const ua=key==='sheq_iris_data_v1'?(Number(localStorage.getItem('sheq_iris_local_updated_v1'))||Date.now()):Date.now();
+ await setDoc(refDoc,{key,value,deleted:false,updatedAt:ua},{merge:true});return true;
 }
 window.sheFirebaseSaveSiteState=(key,value)=>{siteSaveQueue=trackCloudWrite(siteSaveQueue.then(()=>saveSiteStateKey(key,value,false)));return siteSaveQueue;};
 function installSiteStorageHooks(){
