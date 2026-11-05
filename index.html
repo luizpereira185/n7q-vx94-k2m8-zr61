@@ -558,7 +558,7 @@ table{color:#173b67!important}th{background:#edf5fa!important;color:#174a78!impo
   <div class="sec">Histórico de equipamentos — inclusões e exclusões</div>
   <div class="grid3" id="histKpis"></div>
   <div class="card" style="margin:16px 0"><h3>Movimentações por mês</h3><canvas id="histChart" style="width:100%;height:260px"></canvas></div>
-  <div class="card"><div class="filterbar"><select id="histYear" onchange="renderEquipmentHistory()"><option value="">Todos os anos</option></select><select id="histType" onchange="renderEquipmentHistory()"><option value="">Todas as movimentações</option><option value="Inclusão">Inclusões</option><option value="Exclusão">Exclusões</option></select><input id="histSearch" placeholder="Buscar equipamento / TAG / FLOC" oninput="renderEquipmentHistory()"></div>
+  <div class="card"><div class="filterbar"><select id="histYear" onchange="renderEquipmentHistory()"><option value="">Todos os anos</option></select><select id="histType" onchange="renderEquipmentHistory()"><option value="">Todas as movimentações</option><option value="Inclusão">Inclusões</option><option value="Exclusão">Exclusões</option></select><input id="histSearch" placeholder="Buscar equipamento / TAG / FLOC" oninput="renderEquipmentHistory()"><button class="btn ghost" type="button" onclick="clearHistoryManual()">Limpar histórico</button></div>
   <div class="tablewrap"><table><thead><tr><th>Data</th><th>Movimentação</th><th>Equipamento</th><th>TAG / FLOC</th><th>Categoria</th><th>Evidências</th></tr></thead><tbody id="histRows"></tbody></table></div></div>
   <p class="iris-help">O histórico é independente da lista ativa: excluir um equipamento não apaga o registro da movimentação. Anexe o formulário e o e-mail em PDF ou EML em cada registro.</p>
 </section>
@@ -1139,15 +1139,18 @@ function drawIRIS(cat){
 
   // adherence line
   c.strokeStyle='#087fbd';c.lineWidth=3;c.beginPath();
+  let started=false;
   vals.forEach((v,i)=>{
+    if(!v.a)return;
     const x=left+step*i+step/2, yy=yp(v.a);
-    if(i===0)c.moveTo(x,yy);else c.lineTo(x,yy);
+    if(!started){c.moveTo(x,yy);started=true}else c.lineTo(x,yy);
   });
   c.stroke();
 
   // points and labels
   vals.forEach((v,i)=>{
     const x=left+step*i+step/2, yy=yp(v.a);
+    if(!v.a)return;
     c.fillStyle='#087fbd';c.beginPath();c.arc(x,yy,5,0,Math.PI*2);c.fill();
     if(v.a){
       c.fillStyle='#075a9e';c.font='bold 12px system-ui';c.textAlign='center';
@@ -1218,6 +1221,40 @@ document.getElementById('histRows').innerHTML=list.map(x=>`<tr><td>${new Date(x.
 drawMovementChart(year)}
 window.renderEquipmentHistory=renderEquipmentHistory;
 window.setEquipmentMovements=(rows)=>{equipmentMovements=Array.isArray(rows)?rows:[];window.equipmentMovements=equipmentMovements;localStorage.setItem('sheq_equipment_movements_v1',JSON.stringify(equipmentMovements));renderEquipmentHistory();};
+
+/* ===== Configuração única: IRIS 2026 preenchido + histórico limpo ===== */
+const IRIS_SEED_2026={
+ SHE:[[414,3,3,408,98.55],[506,1,4,501,99.01],[589,0,5,584,99.15],[774,0,4,770,99.48],[878,0,3,875,99.66],[1003,0,3,1000,99.70],[1116,0,3,1113,99.73],[1282,0,3,1279,99.77],[1362,0,3,1359,99.78],null,null,null],
+ QUA:[[102,0,'',102,100],[132,0,'',132,100],[145,0,'',145,100],[256,0,'',256,100],[266,0,'',266,100],[284,0,'',284,100],[388,4,'',384,98.97],[391,0,'',391,100],[410,1,'',409,99.76],['', '', '',0,''],['', '', '',0,''],['', '', '',0,'']],
+ SOB:[[20,10,0,10,50],[61,19,0,42,68.85],[97,10,0,87,89.69],[133,15,0,118,88.72],[190,21,0,169,88.95],[213,19,0,194,91.08],[252,19,0,233,92.46],[270,21,0,249,92.22],[328,21,0,307,93.6],null,null,null]
+};
+window.sheApplyIrisSeedOnce=function(force){
+  if(!force&&localStorage.getItem('sheq_iris_seed_2026_v1')==='1')return false;
+  ['SHE','QUA','SOB'].forEach(cat=>IRIS_SEED_2026[cat].forEach((row,i)=>{
+    const r=irisStore[2026][cat][i];
+    if(!row){Object.assign(r,{p:'',nm:'',na:'',r:'',a:''});return;}
+    Object.assign(r,{p:row[0],nm:row[1],na:row[2],r:row[3],a:row[4]===''?'':String(row[4].toFixed(2))});
+  }));
+  irisData=irisStore[irisYear]||irisStore[2026];
+  persistIris();
+  localStorage.setItem('sheq_iris_seed_2026_v1','1');
+  const sec=document.getElementById('iris');if(sec&&!sec.hidden)renderIRIS();
+  return true;
+};
+window.sheClearAllHistory=async function(){
+  if(window.sheFirebaseClearMovementHistory)await window.sheFirebaseClearMovementHistory();
+  window.setEquipmentMovements([]);
+  data.forEach(e=>{e.history=[];});
+  persistData();
+  if(typeof certs==='function')certs();
+};
+window.sheRunOneTimeSetup=async function(){
+  try{window.sheApplyIrisSeedOnce();}catch(e){console.warn('Seed IRIS',e)}
+  if(localStorage.getItem('sheq_clean_history_v1')!=='1'){
+    try{await window.sheClearAllHistory();localStorage.setItem('sheq_clean_history_v1','1');}catch(e){console.warn('Limpeza de histórico',e)}
+  }
+};
+async function clearHistoryManual(){if(!confirm('Apagar TODO o histórico de movimentações e o histórico interno de cada equipamento? Esta ação não pode ser desfeita.'))return;try{await window.sheClearAllHistory();toast('Histórico limpo.')}catch(e){toast('Erro ao limpar histórico: '+(e.message||e))}}
 function drawMovementChart(year){const c=document.getElementById('histChart');if(!c)return;const w=Math.max(320,c.clientWidth),h=260,dpr=devicePixelRatio||1;c.width=w*dpr;c.height=h*dpr;const x=c.getContext('2d');x.setTransform(dpr,0,0,dpr,0,0);x.fillStyle='#fff';x.fillRect(0,0,w,h);const months=Array.from({length:12},(_,i)=>i),a=months.map(m=>equipmentMovements.filter(r=>{const d=new Date(r.at);return(!year||d.getFullYear()==year)&&d.getMonth()===m&&r.type==='Inclusão'}).length),b=months.map(m=>equipmentMovements.filter(r=>{const d=new Date(r.at);return(!year||d.getFullYear()==year)&&d.getMonth()===m&&r.type==='Exclusão'}).length),max=Math.max(1,...a,...b);x.font='11px sans-serif';months.forEach((m,i)=>{const gx=36+i*(w-55)/12,bw=Math.min(13,(w-70)/30);[[a[i],'#20a36b',0],[b[i],'#e5484d',bw+3]].forEach(([v,col,off])=>{x.fillStyle=col;x.fillRect(gx+off,h-35-v/max*190,bw,v/max*190)});x.fillStyle='#555';x.fillText(['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'][m],gx-2,h-14)});x.fillStyle='#20a36b';x.fillRect(w-120,12,10,10);x.fillStyle='#333';x.fillText('Inclusões',w-105,21);x.fillStyle='#e5484d';x.fillRect(w-55,12,10,10);x.fillStyle='#333';x.fillText('Exclusões',w-40,21)}
 
 /* ---------- ui ---------- */
@@ -1554,11 +1591,8 @@ async function syncInitial(){
  const histCloud=histSnap.docs.map(d=>({...d.data(),id:d.id}));
  const histLocal=Array.isArray(window.equipmentMovements)?window.equipmentMovements:[];
  const histMap=new Map(histCloud.map(x=>[String(x.id),x]));
- for(const x of histLocal)if(!histMap.has(String(x.id)))histMap.set(String(x.id),x);
  const mergedHistory=[...histMap.values()];
  if(typeof window.setEquipmentMovements==='function')window.setEquipmentMovements(mergedHistory);
- // Publica no Firestore também os movimentos que existiam apenas neste navegador.
- for(const item of histLocal){if(!histCloud.some(x=>String(x.id)===String(item.id))){const clean={...item};await setDoc(doc(db,'historico_equipamentos',String(item.id)),clean,{merge:true});}}
  const cloud=snap.docs.map(d=>({...d.data(),id:d.id}));
  remoteIds=new Set(snap.docs.map(d=>d.id));lastSynced=new Map(cloud.map(x=>[String(x.id),cleanRecord(x)]));
  let merged;
@@ -1579,6 +1613,7 @@ async function syncInitial(){
    if(typeof window.setEquipmentMovements==='function')window.setEquipmentMovements(rows);
  },err=>{console.error(err);setStatus('erro ao receber histórico: '+err.message,false)});
  connected=true;setStatus(`${merged.length} equipamentos e ${mergedHistory.length} movimentações sincronizados`,true);
+ if(window.sheRunOneTimeSetup){try{await window.sheRunOneTimeSetup()}catch(e){console.warn(e)}}
  await migrateCertificatePdfs();
 }
 async function migrateCertificatePdfs(){
@@ -1596,6 +1631,11 @@ window.sheFirebaseSave=(records)=>{
  const copy=JSON.parse(JSON.stringify(records));
  saveQueue=trackCloudWrite(saveQueue.then(()=>writeRecords(copy)).then(()=>{setStatus('alterações salvas no Firebase',true);return true;}).catch(err=>{console.error(err);setStatus('falha ao salvar: '+err.message,false);return false;}));
  return saveQueue;
+};
+window.sheFirebaseClearMovementHistory=async()=>{
+ if(!db||!auth?.currentUser)throw new Error('Faça login no Firebase para limpar o histórico.');
+ const snap=await getDocs(collection(db,'historico_equipamentos'));
+ for(let i=0;i<snap.docs.length;i+=450){const b=writeBatch(db);snap.docs.slice(i,i+450).forEach(d=>b.delete(d.ref));await b.commit();}
 };
 window.sheFirebaseSaveMovementHistory=async(records)=>{if(!connected||!db||!auth?.currentUser)return;try{for(const item of records){const clean=JSON.parse(JSON.stringify(item));await setDoc(doc(db,'historico_equipamentos',String(item.id)),clean,{merge:true});}setStatus('histórico salvo no Firebase',true);return true;}catch(err){console.error('Histórico Firebase',err);setStatus('falha ao salvar histórico: '+err.message,false);throw err}};
 window.sheFirebaseUploadMovementEvidence=async(movementId,file)=>{if(!connected||!storage||!auth?.currentUser)throw new Error('Faça login no Firebase para sincronizar evidências.');const safe=file.name.replace(/[^a-zA-Z0-9._-]/g,'_');const path=`she-critico-historico/${movementId}/${Date.now()}-${safe}`;const target=ref(storage,path);await uploadBytes(target,file,{contentType:file.type||'application/octet-stream'});return{storagePath:path,url:await getDownloadURL(target)}};
